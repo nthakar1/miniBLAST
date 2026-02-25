@@ -1,3 +1,10 @@
+from itertools import product
+
+##### NOTES FOR LATER: #####
+"""
+- Will want to account for IUPAC nucleotide ambiguity codes during indexation and scoring (reference or query seqs with degenerated bases)
+"""
+
 """
 # Input: two DNA string query and ref, an int k, scores for matches and mismatches, and a threshold score defining an HSSP
 # Output: the highest scoring segment pairs (HSSPs) to be used as seeds for the local alignments. 
@@ -38,7 +45,7 @@ def BestSeeds(ref, query, k, matchScore, mismatchPen, threshHSSP):
         allPossibleKmers = GenerateAllKmers(k)
         potentialHSSPs = [qKmer]
         for kmer in allPossibleKmers:
-            score = ScoreKmers(qKmer, kmer)
+            score = ScoreKmers(qKmer, kmer, matchScore, mismatchPen)
             if score >= threshHSSP:
                 potentialHSSPs.append(kmer)
         
@@ -92,7 +99,8 @@ def KmerNumericalEncoding(kmer):
 # Input: an int k
 # Output: a list of all possible DNA strings of length k
 def GenerateAllKmers(k):
-    kmers = []
+    bases = ["A", "C", "T", "G"]
+    return [''.join(p) for p in product(bases, repeat=k)]
     
 # Input: two kmers of the same length and two scoring parameters
 # Output: the score of the ungapped alignment between the kmers
