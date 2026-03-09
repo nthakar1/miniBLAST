@@ -3,17 +3,24 @@
 Implementing affine gapped X-drop extension algorithm here. Similar to Smith-Waterman (local alignment recurrence from class), but focusing on a smaller section of the DP matrix.
 
 Assumes correct generation of HSSPs with starting indices -- for extension, we extend outward bidirectionally (anchored in the center at the HSSP).
-Uses DP recurrence with affine gap penalties (3-layer DP matrix) to allow indels. X-drop heuristic pruns paths that score more than X below the best score observed so far (allows us to focus on more promising alignment regions). So keep track of the best global score, then drop threshold becomes (best_global_score - X).
+Uses DP recurrence with affine gap penalties (3-layer DP matrix) to allow indels. X-drop heuristic pruns paths that score more than X below the best score observed so far (allows us to focus on
+more promising alignment regions). So keep track of the best global score, then drop threshold becomes (best_global_score - X).
 
 Affine gaps from class vs. in this X-drop version:
-Function from class uses a 3-layer DP full matrix approach to do global alignment with affine gaps -- compute every cell, O(nm) space. X-drop version will focus only on the seeded region, so we use row-based instead -- keep track of curr and prev row since recurrence only depends on direct neighbors, O(m).
-Using Smith-Waterman-like recurrence for local alignment (alignment can start anywhere in the sequences). Since class function is global alignment, it uses best score = sink node. For local alignment, best score can end anywhere and needs to be updated to keep track of the global best -- this is where we start backtracking from.
-Keeping the same affine gap logic for moving between layers + X-drop pruning rule: after computing cell score, check that the score hasn't dropped too low (if cell score > best score - Xdrop, continue. otherwise prune/stop extending). Terminate the row early if there are no good cells left (instead of completing the full row/matrix anyways in traditional DP approach).
+Function from class uses a 3-layer DP full matrix approach to do global alignment with affine gaps -- compute every cell, O(nm) space. X-drop version will focus only on the seeded region, so we
+use row-based instead -- keep track of curr and prev row since recurrence only depends on direct neighbors, O(m).
+Using Smith-Waterman-like recurrence for local alignment (alignment can start anywhere in the sequences). Since class function is global alignment, it uses best score = sink node. For local 
+alignment, best score can end anywhere and needs to be updated to keep track of the global best -- this is where we start backtracking from.
+Keeping the same affine gap logic for moving between layers + X-drop pruning rule: after computing cell score, check that the score hasn't dropped too low (if cell score > best score - Xdrop,
+continue. otherwise prune/stop extending). Terminate the row early if there are no good cells left (instead of completing the full row/matrix anyways in traditional DP approach).
 Key point: original asks for the best alignment between two sequences. X-drop asks: if we already have a good matching region/seed, how far can we extend before alignment becomes bad?
 
 Cell-based vs Row-based X-drop:
-Found references to a row-based heuristic for X-drop pruning, where the idea is to keep track of the best score in a row and to prune if best_score - row_best > xdrop. we assume that if even the best cell in the row is too far below the best alignment so far, then we will not be able to recover a good alignment later in the row and should terminate now. Cell-based is more expensive, so row-based pruning heuristic prunes an entire frontier at once.
-Real BLAST uses cell-based. Allows for more irregularly shaped alignments -- useful in cases when most cells have bad scores but one diagonal had recoverable alignment later on (large indels, temp low-similarity regions/mutation hotspots?, frameshift-like gaps? -- probably more common AA alignment).
+Found references to a row-based heuristic for X-drop pruning, where the idea is to keep track of the best score in a row and to prune if best_score - row_best > xdrop. we assume that if even
+the best cell in the row is too far below the best alignment so far, then we will not be able to recover a good alignment later in the row and should terminate now. Cell-based is more expensive,
+so row-based pruning heuristic prunes an entire frontier at once.
+Real BLAST uses cell-based. Allows for more irregularly shaped alignments -- useful in cases when most cells have bad scores but one diagonal had recoverable alignment later on (large indels,
+temp low-similarity regions/mutation hotspots?, frameshift-like gaps? -- probably more common AA alignment).
 Ex: query: AAAAAAAA--------CCCCCCCC
     ref:   AAAAAAAAGGGGGGGGCCCCCCCC
           [--HSSP--]      [--HSSP--]
@@ -26,8 +33,10 @@ Params needed (+ BLAST defaults):
 - Gap opening penalty
 - Gap extension penalty
 
-Using row-by-row DP matrix for now (like what we did in class). Pruning with X-drop can shrink the search space quickly, but we'll still be iterating across cols for each row (even if we do nothing with that cell).
-Optimizatio idea: BLAST uses diagonal bands (diag = q_idx - r_idx) -- idea is that good alignment mostly stay on the diagonal (same as in 2-hit seeding), even with gaps we shouldn't move too much from the line. Restrict computation in DP matrix to only cells near the seed diagonal (band width depends on X param).
+Using row-by-row DP matrix for now (like what we did in class). Pruning with X-drop can shrink the search space quickly, but we'll still be iterating across cols for each row (even if we do
+nothing with that cell).
+Optimization idea: BLAST uses diagonal bands (diag = q_idx - r_idx) -- idea is that good alignment mostly stay on the diagonal (same as in 2-hit seeding), even with gaps we shouldn't move too
+much from the line. Restrict computation in DP matrix to only cells near the seed diagonal (band width depends on X param).
 """
 
 def extendFromSeeds(ref, query, seeds, k, matchReward, mismatchPenalty, gapOpenPenalty, gapExtendPenalty, Xdrop):
