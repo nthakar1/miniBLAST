@@ -43,11 +43,12 @@ def BestSeeds(ref, query, k, matchScore, mismatchPen, threshHSSP):
 
         # generate a list kmers, including qKmer, with an ungapped alignment at or above the HSSP threshold
         allPossibleKmers = GenerateAllKmers(k)
-        potentialHSSPs = [qKmer]
+        potentialHSSPs = []
         for kmer in allPossibleKmers:
             score = ScoreKmers(qKmer, kmer, matchScore, mismatchPen)
             if score >= threshHSSP:
                 potentialHSSPs.append(kmer)
+        print(potentialHSSPs)
         
         # if a potential HSSP matches a reference kmer in d, save the qKmer start position (i) and the rKmer start position(s) (d[HSSP])
         for kmer in potentialHSSPs:
@@ -90,10 +91,12 @@ def EncodedIndexation(ref, k):
 # Output: a numerical representation of the kmer
 def KmerNumericalEncoding(kmer):
     encodingDict = {"A":0, "C":1, "G":2, "T":3}
+    k = len(kmer)
     res = 0
-    for base in kmer:
+    for pos in range(k):
+        base = kmer[pos]
         val = encodingDict[base]
-        res += val * (4**val)
+        res += val * (4**(k-pos-1))
     return res
 
 # Input: an int k
@@ -105,6 +108,9 @@ def GenerateAllKmers(k):
 # Input: two kmers of the same length and two scoring parameters
 # Output: the score of the ungapped alignment between the kmers
 def ScoreKmers(qKmer, rKmer, matchScore, mismatchPen):
+    """
+    Redudant with current scoreKmers function in extendSeeds.py, waiting for updated version that uses nucleotide BLOSUM equivalent
+    """
     score = 0
     for i in range(len(qKmer)):
         if qKmer[i] == rKmer[i]:
