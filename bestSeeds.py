@@ -48,8 +48,7 @@ def BestSeeds(ref, query, k, matchScore, mismatchPen, threshHSSP):
             score = ScoreKmers(qKmer, kmer, matchScore, mismatchPen)
             if score >= threshHSSP:
                 potentialHSSPs.append(kmer)
-        print(potentialHSSPs)
-        
+
         # if a potential HSSP matches a reference kmer in d, save the qKmer start position (i) and the rKmer start position(s) (d[HSSP])
         for kmer in potentialHSSPs:
              check = KmerNumericalEncoding(kmer)
