@@ -16,6 +16,14 @@ def main():
     query = "ATCG"
     ref = "GGACGGATTCCATGGATA"
 
+    query2 = "AAATGCCCCCCATGAA"
+    ref2 = "TTATGGGGGGGATGTT"
+    print(miniBLAST(ref2, query2, 3, 2, 3, 5, 2, 6, 20, 12))
+    """
+    expected output: 
+    Seeds1: [[2, 2], [11, 11]]
+    Seeds2: [[11, 11]]
+    """
     print(miniBLAST(ref, query, 3, 2, 3, 5, 2, 1, 20, 1))
 
 
