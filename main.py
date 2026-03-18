@@ -6,9 +6,11 @@ from TwoHit import TwoHitSeeds
 # Output:
 def miniBLAST(ref, query, k, matchReward, mismatchPen, gapOpenPen, gapExtendPen, threshHSSP, Xdrop, A):
     singleSeeds = BestSeeds(ref, query, k, matchReward, mismatchPen, threshHSSP)
+    print("Seeds1:", singleSeeds)
     
     seedsToExtend = TwoHitSeeds(singleSeeds, k, A)
-    
-    bestLocalAlignment = extendFromSeeds(ref, query, seedsToExtend, k, matchReward, mismatchPen, gapOpenPen, gapExtendPen, Xdrop)
+    print("Seeds2:", seedsToExtend)
+
+    bestLocalAlignment = extendFromSeeds(ref, query, singleSeeds, k, matchReward, mismatchPen, gapOpenPen, gapExtendPen, Xdrop)
     
     return bestLocalAlignment

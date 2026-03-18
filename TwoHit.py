@@ -42,7 +42,7 @@ def TwoHitSeeds(single_hits, k, A):
     for q_pos, r_pos in single_hits:
         diag = q_pos - r_pos
         if diag not in diagonals:
-            diagonals[diagonals] = []
+            diagonals[diag] = []
         diagonals[diag].append([q_pos, r_pos])
 
     # check proximity and trigger extension
