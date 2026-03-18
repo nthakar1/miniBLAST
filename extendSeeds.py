@@ -58,13 +58,13 @@ def extendFromSeeds(ref, query, seeds, k, matchReward, mismatchPenalty, gapOpenP
         q_right = query[q_start+k:]
         r_right = ref[r_start+k:]
 
-        right = affineExtension_perCell(q_right, r_right, matchReward, mismatchPenalty, gapOpenPenalty, gapExtendPenalty, Xdrop)
+        right = affineExtension_perRow(q_right, r_right, matchReward, mismatchPenalty, gapOpenPenalty, gapExtendPenalty, Xdrop)
 
         # extend leftwards (using reversed seq)
         q_left = query[:q_start][::-1]
         r_left = ref[:r_start][::-1]
 
-        left = affineExtension_perCell(q_left, r_left, matchReward, mismatchPenalty, gapOpenPenalty, gapExtendPenalty, Xdrop)
+        left = affineExtension_perRow(q_left, r_left, matchReward, mismatchPenalty, gapOpenPenalty, gapExtendPenalty, Xdrop)
 
         # combine extensions into a single scored alignment
         score = left["score"] + seed_score + right["score"]
