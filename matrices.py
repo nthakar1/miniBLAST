@@ -8,10 +8,10 @@ BLASTN_PARAMS = {
     "name": "blastn",
     "matrix": None,  
     "match_reward": 2,
-    "mismatch_penalty": -3,
+    "mismatch_penalty": 3,
     "gap_opening": 5,
     "gap_extension": 2,
-    "k_mer_size": 7,  # Default for BLASTN [cite: 65]
+    "k_mer_size": 7,  
     "threshold_T": None, # T is not used in standard BLASTN [cite: 65]
     "xdrop_ungap": 20,
     "xdrop_gap": 30,
