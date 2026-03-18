@@ -58,13 +58,13 @@ def extendFromSeeds(ref, query, seeds, k, matchReward, mismatchPenalty, gapOpenP
         q_right = query[q_start+k:]
         r_right = ref[r_start+k:]
 
-        right = affineExtension_perCell(q_right, r_right, matchReward, mismatchPenalty, gapOpenPenalty, gapExtendPenalty, Xdrop)
+        right = affineExtension_perRow(q_right, r_right, matchReward, mismatchPenalty, gapOpenPenalty, gapExtendPenalty, Xdrop)
 
         # extend leftwards (using reversed seq)
         q_left = query[:q_start][::-1]
         r_left = ref[:r_start][::-1]
 
-        left = affineExtension_perCell(q_left, r_left, matchReward, mismatchPenalty, gapOpenPenalty, gapExtendPenalty, Xdrop)
+        left = affineExtension_perRow(q_left, r_left, matchReward, mismatchPenalty, gapOpenPenalty, gapExtendPenalty, Xdrop)
 
         # combine extensions into a single scored alignment
         score = left["score"] + seed_score + right["score"]
@@ -97,7 +97,10 @@ def combineAlignments(left, q_seed, r_seed, right):
     
     return q_aligned, r_aligned
 
-def affineExtension_perRow(query, ref, matchReward, mismatchPenalty, gapOpenPenalty, gapExtendPenalty, Xdrop):
+def affineExtension_perRow(query, ref,
+                           matchReward, mismatchPenalty,
+                           gapOpenPenalty, gapExtendPenalty,
+                           Xdrop):
     """
     Row-based DP with X-drop extension + affine gap penalties moving rightwards. Returns alignment and associated score.
 
@@ -106,71 +109,137 @@ def affineExtension_perRow(query, ref, matchReward, mismatchPenalty, gapOpenPena
     I = insertion in query (gap in reference), gapping row axis
     D = deletion in query (gap in query), gapping col axis
     """
+
     n = len(ref)
     m = len(query)
-    
-    # prev row (don't need I_prev since we move horizontally in the same row)
-    M_prev = [0] * (m + 1)
-    D_prev = [float("-inf")] * (m + 1)
+
+    NEG_INF = float("-inf")
+
+    # DP matrices
+    M = [[0]*(m+1) for _ in range(n+1)]
+    I = [[NEG_INF]*(m+1) for _ in range(n+1)]
+    D = [[NEG_INF]*(m+1) for _ in range(n+1)]
+
+    # backtracking pointers: store (prev_state, prev_i, prev_j)
+    ptr_M = [[None]*(m+1) for _ in range(n+1)]
+    ptr_I = [[None]*(m+1) for _ in range(n+1)]
+    ptr_D = [[None]*(m+1) for _ in range(n+1)]
 
     best_score = 0
-    best_position = (0, 0)
+    best_pos = (0, 0)
+    best_state = "M"
 
-    # iterate through rows (ref string)
-    for i in range(1, n + 1):
-        # curr row
-        M_curr = [0] * (m + 1)
-        I_curr = [float("-inf")] * (m + 1)
-        D_curr = [float("-inf")] * (m + 1)
+    for i in range(1, n+1):
 
-        row_best = float("-inf")
+        row_best = NEG_INF
 
-        # iterate through cols (query string)
-        for j in range(1, m + 1):
-            # match/mismatch score
+        for j in range(1, m+1):
+
+            # match / mismatch
             if ref[i-1] == query[j-1]:
                 diag = matchReward
             else:
                 diag = -mismatchPenalty
-            
-            # insertion (gap in ref)
-            I_curr[j] = max(
-                M_curr[j-1] - gapOpenPenalty,
-                I_curr[j-1] - gapExtendPenalty
-            )
 
-            # deletion (gap in query)
-            D_curr[j] = max(
-                M_prev[j] - gapOpenPenalty,
-                D_prev[j] - gapExtendPenalty
-            )
+            # i state -- gap in ref
+            from_M = M[i][j-1] - gapOpenPenalty
+            from_I = I[i][j-1] - gapExtendPenalty
 
-            # find best score for curr cell
-            M_curr[j] = max(
-                0,
-                M_prev[j-1] + diag,
-                I_curr[j],
-                D_curr[j]
-            )
+            if from_M >= from_I:
+                I[i][j] = from_M
+                ptr_I[i][j] = ("M", i, j-1)
+            else:
+                I[i][j] = from_I
+                ptr_I[i][j] = ("I", i, j-1)
 
-            # find best global score
-            if M_curr[j] > best_score:
-                best_score = M_curr[j]
-                best_position = (i,j)
+            # d state -- gap in query
+            from_M = M[i-1][j] - gapOpenPenalty
+            from_D = D[i-1][j] - gapExtendPenalty
 
-            # find best score in row
-            if M_curr[j] > row_best:
-                row_best = M_curr[j]
+            if from_M >= from_D:
+                D[i][j] = from_M
+                ptr_D[i][j] = ("M", i-1, j)
+            else:
+                D[i][j] = from_D
+                ptr_D[i][j] = ("D", i-1, j)
 
-        # Xdrop pruning
+            # m state -- match/mismatch, pull from both query and ref
+            candidates = [
+                (0, None),  # restart
+                (M[i-1][j-1] + diag, ("M", i-1, j-1)),
+                (I[i][j], ("I", i, j)),
+                (D[i][j], ("D", i, j))
+            ]
+
+            best_val, best_ptr = max(candidates, key=lambda x: x[0])
+
+            M[i][j] = best_val
+            ptr_M[i][j] = best_ptr
+
+            # track best overall
+            cell_score = max(M[i][j], I[i][j], D[i][j])
+
+            if cell_score > best_score:
+                best_score = cell_score
+                best_pos = (i, j)
+
+                # track which state we ended in
+                if cell_score == M[i][j]:
+                    best_state = "M"
+                elif cell_score == I[i][j]:
+                    best_state = "I"
+                else:
+                    best_state = "D"
+
+            if cell_score > row_best:
+                row_best = cell_score
+
+        # check X-drop pruning condition
         if best_score - row_best > Xdrop:
             break
 
-        # slide windows
-        M_prev = M_curr
-        D_prev = D_curr
+    # backtracking
+    aligned_q = []
+    aligned_r = []
 
-    return best_score, best_position
+    i, j = best_pos
+    state = best_state
+
+    while i > 0 and j > 0:
+
+        if state == "M":
+            ptr = ptr_M[i][j]
+            if ptr is None:
+                break
+
+            prev_state, pi, pj = ptr
+
+            if M[i][j] == 0:
+                break
+
+            aligned_q.append(query[j-1])
+            aligned_r.append(ref[i-1])
+
+        elif state == "I":
+            prev_state, pi, pj = ptr_I[i][j]
+            aligned_q.append(query[j-1])
+            aligned_r.append("-")
+
+        elif state == "D":
+            prev_state, pi, pj = ptr_D[i][j]
+            aligned_q.append("-")
+            aligned_r.append(ref[i-1])
+
+        i, j = pi, pj
+        state = prev_state
+
+    aligned_q = "".join(reversed(aligned_q))
+    aligned_r = "".join(reversed(aligned_r))
+
+    return {
+        "score": best_score,
+        "alignment": (aligned_q, aligned_r)
+    }
 
 def affineExtension_perCell(query, ref, matchReward, mismatchPenalty, gapOpenPenalty, gapExtendPenalty, Xdrop):
     """
