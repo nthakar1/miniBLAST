@@ -1,108 +1,137 @@
+from Bio.Align import substitution_matrices
+BLOSUM62 = substitution_matrices.load("BLOSUM62")
+
 # IMPLEMENTATION NOTES:
 """
-Implementing affine gapped X-drop extension algorithm here. Similar to Smith-Waterman (local alignment recurrence from class), but focusing on a smaller section of the DP matrix.
+UPDATED EXTENSION PIPELINE
+Input: 2-hit filtered list of HSSPs
+Extension algorithm (previous implementation was more conceptual):
+1. Ungapped extension on all HSSPs
+2. Filter by S1 threshold
+3. Run seed-centered gapped extension on the S1-filtered list
+4. Return best of these gapped alignments
 
-Assumes correct generation of HSSPs with starting indices -- for extension, we extend outward bidirectionally (anchored in the center at the HSSP).
-Uses DP recurrence with affine gap penalties (3-layer DP matrix) to allow indels. X-drop heuristic pruns paths that score more than X below the best score observed so far (allows us to focus on
-more promising alignment regions). So keep track of the best global score, then drop threshold becomes (best_global_score - X).
+REFINED GAPPED EXTENSION
+Before, we used a full n x m DP matrix with indexing to access cells. This approach requires us to full the entire matrix, then backtrack from the best cell.
+For seed-centered DP, we only compute cells that are visited (instead of computing the entire matrix). Store the 3-levels as dicts using (i, j) as offsets from the seed in (query, ref) since we don't have array-supported global indexing anymore.
+For every explored cell (i, j): compute the 3 states M/I/D (if the "parent" cell wasn't computed, store -inf at the current cell instead -- pruning). Assumption is that if the parent wasn't computed, the path to the current cell isn't promising/worth exploring so we cut it off early.
+At each layer, check the Xdrop condition (in the first run-through, use Xdrop_gap). A layer represents moving one level outwards from the seed (in a classic DP matrix, we use a source -> sink approach that would start with the seed. Here, we expand in many relative to the seed at once). The explored/computed region ends up looking more like a cloud of cells around the seed rather than a full rectangle.
 
-Affine gaps from class vs. in this X-drop version:
-Function from class uses a 3-layer DP full matrix approach to do global alignment with affine gaps -- compute every cell, O(nm) space. X-drop version will focus only on the seeded region, so we
-use row-based instead -- keep track of curr and prev row since recurrence only depends on direct neighbors, O(m).
-Using Smith-Waterman-like recurrence for local alignment (alignment can start anywhere in the sequences). Since class function is global alignment, it uses best score = sink node. For local 
-alignment, best score can end anywhere and needs to be updated to keep track of the global best -- this is where we start backtracking from.
-Keeping the same affine gap logic for moving between layers + X-drop pruning rule: after computing cell score, check that the score hasn't dropped too low (if cell score > best score - Xdrop,
-continue. otherwise prune/stop extending). Terminate the row early if there are no good cells left (instead of completing the full row/matrix anyways in traditional DP approach).
-Key point: original asks for the best alignment between two sequences. X-drop asks: if we already have a good matching region/seed, how far can we extend before alignment becomes bad?
+For backtracking, we can no longer store full backtracking matrices with pointers for each level. Instead, store pointers to the previous (position, state) so that we can reconstruct the aligned strings. Continue traceback until we've gone through all the pointers OR we trigger the Xdrop_gap_final condition Final Xdrop is more aggressive than Xdrop_gap used in extension -- idea is that it is a final check during traceback to make sure we don't have any trailing tails off the alignment that aren't actually good extensions.
 
-Cell-based vs Row-based X-drop:
-Found references to a row-based heuristic for X-drop pruning, where the idea is to keep track of the best score in a row and to prune if best_score - row_best > xdrop. we assume that if even
-the best cell in the row is too far below the best alignment so far, then we will not be able to recover a good alignment later in the row and should terminate now. Cell-based is more expensive,
-so row-based pruning heuristic prunes an entire frontier at once.
-Real BLAST uses cell-based. Allows for more irregularly shaped alignments -- useful in cases when most cells have bad scores but one diagonal had recoverable alignment later on (large indels,
-temp low-similarity regions/mutation hotspots?, frameshift-like gaps? -- probably more common AA alignment).
-Ex: query: AAAAAAAA--------CCCCCCCC
-    ref:   AAAAAAAAGGGGGGGGCCCCCCCC
-          [--HSSP--]      [--HSSP--]
-Depending on chosen params, row-based would drop off early due to G chain indel but cell-based can recover the alignment at the C chain.
-
-Params needed (+ BLAST defaults):
-- X (20), can test 10-30 for nucleotides, 40-100 for AAs?
-- Match reward
-- Mismatch penalty
-- Gap opening penalty
-- Gap extension penalty
-
-Using row-by-row DP matrix for now (like what we did in class). Pruning with X-drop can shrink the search space quickly, but we'll still be iterating across cols for each row (even if we do
-nothing with that cell).
-Optimization idea: BLAST uses diagonal bands (diag = q_idx - r_idx) -- idea is that good alignment mostly stay on the diagonal (same as in 2-hit seeding), even with gaps we shouldn't move too
-much from the line. Restrict computation in DP matrix to only cells near the seed diagonal (band width depends on X param).
+PROTEIN ALIGNMENT SUPPORT
+For nucleotide alignment, we keep match/mismatch. For protein alignment we want to use standard scores from BLOSUM. To support both, generalized the extension algorithm
 """
 
-def extendFromSeeds(ref, query, seeds, k, matchReward, mismatchPenalty, gapOpenPenalty, gapExtendPenalty, Xdrop):
+def extendFromSeeds(ref, query, seeds, k, s1, matrix, match, mismatch, gapOpen, gapExtend, Xdrop_ungap, Xdrop_gap, Xdrop_final):
     """
     Extends all seeds and returns the best scoring alignment.
-    Assuming seeds is given as a tuples of starting indices with (query_kmer_start, ref_kmer_start).
+    Assuming seeds is given as a tuple of starting indices with (query_kmer_start, ref_kmer_start).
     """
 
+    # ungapped on all HSSPs
+    ungapped_hits = []
+    for q_start, r_start in seeds:
+        ungapped = ungappedExtension(query, ref, q_start, r_start, k, matrix, match, mismatch, Xdrop_ungap)
+
+        # S1-threshold filtering
+        if ungapped["score"] >= s1:
+            ungapped_hits.append(ungapped)
+
+    print(f"UNGAPPED HITS: {ungapped_hits}")
+
+    if not ungapped_hits:
+        return None
+    
     best_alignment = None
     best_score = float("-inf")
 
-    for q_start, r_start in seeds:
-        q_seed = query[q_start:q_start+k]
-        r_seed = ref[r_start:r_start+k]
+    # gapped extension for each surviving seed pair
+    for hit in ungapped_hits:
+        q_seed = hit["q_seed"]
+        r_seed = hit["r_seed"]
 
-        seed_score = scoreKmers(q_seed, r_seed, matchReward, mismatchPenalty)
+        gapped = affineGappedExtension(query, ref, q_seed, r_seed, matrix, match, mismatch, gapOpen, gapExtend, Xdrop_gap, Xdrop_final)
 
-        # extend rightwards
-        q_right = query[q_start+k:]
-        r_right = ref[r_start+k:]
+        # update best overall alignment
+        if gapped["score"] > best_score:
+            best_score = gapped["score"]
+            best_alignment = gapped
 
-        right = affineExtension_perRow(q_right, r_right, matchReward, mismatchPenalty, gapOpenPenalty, gapExtendPenalty, Xdrop)
-
-        # extend leftwards (using reversed seq)
-        q_left = query[:q_start][::-1]
-        r_left = ref[:r_start][::-1]
-
-        left = affineExtension_perRow(q_left, r_left, matchReward, mismatchPenalty, gapOpenPenalty, gapExtendPenalty, Xdrop)
-
-        # combine extensions into a single scored alignment
-        score = left["score"] + seed_score + right["score"]
-        alignment = combineAlignments(left, q_seed, r_seed, right)
-
-        # update best scoring alignment
-        if score > best_score:
-            best_score = score
-            best_alignment = {
-                "score": score,
-                "query": alignment[0],
-                "ref": alignment[1]
-            }
+    print(f"GAPPED: {best_score}")
 
     return best_alignment
 
-
-def combineAlignments(left, q_seed, r_seed, right):
+def ungappedExtension(query, ref, q_start, r_start, k, matrix=None, match=None, mismatch=None, Xdrop=20):
     """
-    Combines left extension + seed + right extension.
+    Ungapped extension with Xdrop centered around the seed.
+    Returns dict with score, boundaries, and alignment strings.
     """
-    q_left, r_left = left["alignment"]
-    q_right, r_right = right["alignment"]
 
-    # restoring correct order for left extension
-    q_left, r_left = q_left[::-1], r_left[::-1]
+    # score the seed
+    curr_score = 0
+    for i in range(k):
+        curr_score += scorePair(query[q_start+i], ref[r_start+i], matrix, match, mismatch)
 
-    q_aligned = q_left + q_seed + q_right
-    r_aligned = r_left + r_seed + r_right
+    # extend right
+    i = k
+    temp_score = curr_score
+    best_right_score = curr_score
+    right_end = k
+
+    while q_start + i < len(query) and r_start + i < len(ref):
+        temp_score += scorePair(query[q_start+i], ref[r_start+i], matrix, match, mismatch)
+
+        if temp_score > best_right_score:
+            best_right_score = temp_score
+            right_end = i + 1
+
+        # check Xdrop condition
+        if best_right_score - temp_score > Xdrop:
+            break
+
+        i += 1
     
-    return q_aligned, r_aligned
+    # extend left
+    i = 1
+    temp_score = curr_score
+    best_left_score = curr_score
+    left_start = 0
 
-def affineExtension_perRow(query, ref,
-                           matchReward, mismatchPenalty,
-                           gapOpenPenalty, gapExtendPenalty,
-                           Xdrop):
+    while q_start - i >= 0 and r_start - i >= 0:
+        temp_score += scorePair(query[q_start-i], ref[r_start-i], matrix, match, mismatch)
+
+        if temp_score > best_left_score:
+            best_left_score = temp_score
+            left_start = -i
+
+        # check Xdrop condition
+        if best_left_score - temp_score > Xdrop:
+            break
+
+        i += 1
+
+    q_left = q_start + left_start
+    q_right = q_start + right_end
+    r_left = r_start + left_start
+    r_right = r_start + right_end
+
+    aligned_q = query[q_left:q_right]
+    aligned_r = ref[r_left:r_right]
+
+    return {
+        "score": best_left_score + best_right_score - curr_score,
+        "alignment": (aligned_q, aligned_r),
+        "q_range": (q_left, q_right),
+        "r_range": (r_left, r_right),
+        "q_seed": q_start,
+        "r_seed": r_start
+    }
+
+
+def affineGappedExtension(query, ref, q_seed, r_seed, matrix=None, match=None, mismatch=None, gapOpen=5, gapExtend=2, Xdrop=30, Xdrop_final=100):
     """
-    Row-based DP with X-drop extension + affine gap penalties moving rightwards. Returns alignment and associated score.
+    Row-based DP with X-drop extension + affine gap penalties moving rightwards. Returns alignment and associated score. Removed "free ride" edges, since we require the alignment to anchor at the seed.
 
     States:
     M = match/mismatch layer
@@ -110,230 +139,238 @@ def affineExtension_perRow(query, ref,
     D = deletion in query (gap in query), gapping col axis
     """
 
-    n = len(ref)
-    m = len(query)
+    # 3-level matrix for affine gap support
+    M, I, D = {}, {}, {}
 
-    NEG_INF = float("-inf")
+    # pointer dict for backtracking
+    back = {}
 
-    # DP matrices
-    M = [[0]*(m+1) for _ in range(n+1)]
-    I = [[NEG_INF]*(m+1) for _ in range(n+1)]
-    D = [[NEG_INF]*(m+1) for _ in range(n+1)]
-
-    # backtracking pointers: store (prev_state, prev_i, prev_j)
-    ptr_M = [[None]*(m+1) for _ in range(n+1)]
-    ptr_I = [[None]*(m+1) for _ in range(n+1)]
-    ptr_D = [[None]*(m+1) for _ in range(n+1)]
-
-    best_score = 0
+    M[(0, 0)] = scorePair(query[q_seed], ref[r_seed], matrix, match, mismatch)
+    best_score = M[(0, 0)]
     best_pos = (0, 0)
     best_state = "M"
 
-    for i in range(1, n+1):
+    # since we are no longer using the n x m matrix, need to set some limit
+    max_band = min(len(query), len(ref)) # limit by length
+    # max_band = 2 * (Xdrop // min(match, mismatch)) # limit by scoring scheme
 
-        row_best = NEG_INF
+    for d in range(1, max_band):
+        layer_best = float("-inf")
 
-        for j in range(1, m+1):
+        for i in range(-d, d+1):
+            j = d
 
-            # match / mismatch
-            if ref[i-1] == query[j-1]:
-                diag = matchReward
+            qi = q_seed + i
+            ri = r_seed + j
+
+            if qi < 0 or qi >= len(query) or ri < 0 or ri >= len(ref):
+                continue
+
+            key = (i, j)
+            s = scorePair(query[qi], ref[ri], matrix, match, mismatch)
+            # print(f"s ({query[qi]}, {ref[ri]}) = {s}")
+
+            prev_diag = (i - 1, j - 1)
+            prev_left = (i, j - 1)
+            prev_up = (i - 1, j)
+
+            # I state
+            i_M = M.get(prev_left, float("-inf")) - gapOpen
+            i_I = I.get(prev_left, float("-inf")) - gapExtend
+
+            if i_M >= i_I:
+                I[key] = i_M
+                back[(key, "I")] = (prev_left, "M")
             else:
-                diag = -mismatchPenalty
+                I[key] = i_I
+                back[(key, "I")] = (prev_left, "I")
 
-            # i state -- gap in ref
-            from_M = M[i][j-1] - gapOpenPenalty
-            from_I = I[i][j-1] - gapExtendPenalty
+            # D state
+            d_M = M.get(prev_up, float("-inf")) - gapOpen
+            d_D = D.get(prev_up, float("-inf")) - gapExtend
 
-            if from_M >= from_I:
-                I[i][j] = from_M
-                ptr_I[i][j] = ("M", i, j-1)
+            if d_M >= d_D:
+                D[key] = d_M
+                back[(key, "D")] = (prev_up, "M")
             else:
-                I[i][j] = from_I
-                ptr_I[i][j] = ("I", i, j-1)
+                D[key] = d_D
+                back[(key, "D")] = (prev_up, "D")
 
-            # d state -- gap in query
-            from_M = M[i-1][j] - gapOpenPenalty
-            from_D = D[i-1][j] - gapExtendPenalty
-
-            if from_M >= from_D:
-                D[i][j] = from_M
-                ptr_D[i][j] = ("M", i-1, j)
+            # M state
+            if prev_diag in M:
+                m_M = M[prev_diag] + s
             else:
-                D[i][j] = from_D
-                ptr_D[i][j] = ("D", i-1, j)
+                m_M = float("-inf")
 
-            # m state -- match/mismatch, pull from both query and ref
-            candidates = [
-                (0, None),  # restart
-                (M[i-1][j-1] + diag, ("M", i-1, j-1)),
-                (I[i][j], ("I", i, j)),
-                (D[i][j], ("D", i, j))
-            ]
+            candidates = [(m_M, (prev_diag, "M")),
+                          (I[key], (key, "I")),
+                          (D[key], (key, "D"))]
+            best_val, best_back = max(candidates, key=lambda x: x[0])
 
-            best_val, best_ptr = max(candidates, key=lambda x: x[0])
+            M[key] = best_val
+            back[(key, "M")] = best_back
 
-            M[i][j] = best_val
-            ptr_M[i][j] = best_ptr
-
-            # track best overall
-            cell_score = max(M[i][j], I[i][j], D[i][j])
+            # track best
+            cell_score = max(M[key], I[key], D[key])
+            # print(f"CELL_SCORE {key}: {cell_score}")
 
             if cell_score > best_score:
                 best_score = cell_score
-                best_pos = (i, j)
+                best_pos = key
 
-                # track which state we ended in
-                if cell_score == M[i][j]:
+                if cell_score == M[key]:
                     best_state = "M"
-                elif cell_score == I[i][j]:
+                elif cell_score == I[key]:
                     best_state = "I"
                 else:
                     best_state = "D"
+            
+            layer_best = max(layer_best, cell_score)
 
-            if cell_score > row_best:
-                row_best = cell_score
-
-        # check X-drop pruning condition
-        if best_score - row_best > Xdrop:
+        # check Xdrop condition
+        if best_score - layer_best > Xdrop:
             break
 
+    # print(f"BEST_SCORE: {best_score}")
+    # print(f"BEST_POS: {best_pos}")
+    # print(f"BEST_STATE: {best_state}")
+
     # backtracking
-    aligned_q = []
-    aligned_r = []
+    aligned_q, aligned_r = backtrack(query, ref, q_seed, r_seed, back, best_pos, best_state, best_score, Xdrop_final, matrix, match, mismatch, gapOpen, gapExtend)
 
-    i, j = best_pos
-    state = best_state
-
-    while i > 0 and j > 0:
-
-        if state == "M":
-            ptr = ptr_M[i][j]
-            if ptr is None:
-                break
-
-            prev_state, pi, pj = ptr
-
-            if M[i][j] == 0:
-                break
-
-            aligned_q.append(query[j-1])
-            aligned_r.append(ref[i-1])
-
-        elif state == "I":
-            prev_state, pi, pj = ptr_I[i][j]
-            aligned_q.append(query[j-1])
-            aligned_r.append("-")
-
-        elif state == "D":
-            prev_state, pi, pj = ptr_D[i][j]
-            aligned_q.append("-")
-            aligned_r.append(ref[i-1])
-
-        i, j = pi, pj
-        state = prev_state
-
-    aligned_q = "".join(reversed(aligned_q))
-    aligned_r = "".join(reversed(aligned_r))
+    q_cov = computeQueryCov(query, aligned_q)
+    # compute percent identity later
 
     return {
         "score": best_score,
-        "alignment": (aligned_q, aligned_r)
+        "alignment": (aligned_q, aligned_r),
+        "query_coverage": q_cov
     }
 
-def affineExtension_perCell(query, ref, matchReward, mismatchPenalty, gapOpenPenalty, gapExtendPenalty, Xdrop):
+def backtrack(query, ref, q_seed, r_seed, back, start_pos, start_state, best_score, Xdrop, matrix, match, mismatch, gapOpen, gapExtend):
     """
-    Row-based DP with X-drop extension + affine gap penalties moving rightwards. Returns alignment and associated score.
-
-    States:
-    M = match/mismatch layer
-    I = insertion in query (gap in reference), gapping row axis
-    D = deletion in query (gap in query), gapping col axis
+    Backtracks alignement with affine gap penalties and Xdrop_final condition to check final best alignment and reconstruct aligned strings.
     """
-    n = len(ref)
-    m = len(query)
-    
-    # prev row (don't need I_prev since we move horizontally in the same row)
-    M_prev = [0] * (m + 1)
-    D_prev = [float("-inf")] * (m + 1)
 
-    best_score = 0
-    best_position = (0, 0)
+    aligned_q, aligned_r = [], []
 
-    # iterate through rows (ref string)
-    for i in range(1, n + 1):
-        # curr row
-        M_curr = [0] * (m + 1)
-        I_curr = [float("-inf")] * (m + 1)
-        D_curr = [float("-inf")] * (m + 1)
+    pos = start_pos
+    state = start_state
 
-        active_cells = False # for tracking whether any cell survives pruning
+    curr_score = best_score
 
-        # iterate through cols (query string)
-        for j in range(1, m + 1):
-            # match/mismatch score
-            if ref[i-1] == query[j-1]:
-                diag = matchReward
+    while True:
+        i, j = pos
+        qi = q_seed + i
+        ri = r_seed + j
+
+        # add current char to alignment
+        # match/mismatch
+        if state == "M":
+            aligned_q.append(query[qi])
+            aligned_r.append(ref[ri])
+
+            score = scorePair(query[qi], ref[ri], matrix, match, mismatch)
+        elif state == "I":
+            aligned_q.append(query[qi])
+            aligned_r.append("-")
+
+            prev_state = back.get((pos, state), (None, None))[1]
+            if prev_state == "M":
+                score = -gapOpen
             else:
-                diag = -mismatchPenalty
-            
-            # insertion (gap in ref)
-            I_curr[j] = max(
-                M_curr[j-1] - gapOpenPenalty,
-                I_curr[j-1] - gapExtendPenalty
-            )
+                score = -gapExtend
+        elif state == "D":
+            aligned_q.append("-")
+            aligned_r.append(ref[ri])
 
-            # deletion (gap in query)
-            D_curr[j] = max(
-                M_prev[j] - gapOpenPenalty,
-                D_prev[j] - gapExtendPenalty
-            )
+            prev_state = back.get((pos, state), (None, None))[1]
+            if prev_state == "M":
+                score = -gapOpen
+            else:
+                score = -gapExtend
+        else:
+            raise ValueError("Unexpected state during backtracking.")
+        
+        # update running score (working in reverse)
+        curr_score -= score
 
-            # find best score for curr cell
-            M_curr[j] = max(
-                0,
-                M_prev[j-1] + diag,
-                I_curr[j],
-                D_curr[j]
-            )
-
-            # best state at this cell
-            cell_score = max(M_curr[j], I_curr[j], D_curr[j])
-            
-            # Xdrop pruning
-            if best_score - cell_score > Xdrop:
-                M_curr[j] = float("-inf")
-                I_curr[j] = float("-inf")
-                D_curr[j] = float("-inf")
-                continue
-
-            active_cells = True
-
-            # find best global score
-            if M_curr[j] > best_score:
-                best_score = M_curr[j]
-                best_position = (i,j)
-
-        # if entire row is pruned, stop extending
-        if not active_cells:
+        # check Xdrop condition
+        if best_score - curr_score > Xdrop:
             break
 
-        # slide windows
-        M_prev = M_curr
-        D_prev = D_curr
+        # stop if no parent
+        if (pos, state) not in back:
+            break
 
-    return best_score, best_position
+        # otherwise update to the prev state
+        pos, state = back[(pos, state)]
 
-def scoreKmers(qKmer, rKmer, matchReward, mismatchPenalty):
+    aligned_q_str = "".join(reversed(aligned_q))
+    aligned_r_str = "".join(reversed(aligned_r))
+
+    return aligned_q_str, aligned_r_str
+
+def computeQueryCov(query, aligned_query):
     """
-    Scores ungapped alignment between two kmers (LCS score).
-    Using simple equality for nucleotides for now, will have to change logic for AA sequences later based on BLOSUM.
+    Calculates percent query coverage (amount of the input query sequence used in the alignment).
     """
 
-    score = 0
-    for q, r in zip(qKmer, rKmer):
-        if q == r:
-            score += matchReward
+    # find num of chars used in alignment
+    aligned_chars = 0
+    for symbol in aligned_query:
+        if symbol != "-":
+            aligned_chars += 1
+    
+    q_cov = (aligned_chars / len(query)) * 100
+    return q_cov
+
+def scorePair(a, b, matrix=None, match=None, mismatch=None):
+    """
+    General scoring function:
+    - protein: takes BLOSUM as substitution matrix
+    - nucleotide: no matrix passed, use simple match/mismatch
+    """
+
+    if matrix is not None:
+        return matrix[a][b]
+    else:
+        if a == b:
+            return match
         else:
-            score -= mismatchPenalty
-    return score
+            return -mismatch
+        
+
+def main():
+
+    # query = "ACTGCTG"
+    # ref = "ACTCACTG"
+    query = "MPQLSLSWLGLGPVAASPWLLLLLVGGSWLLARVLAWTYTFYDNCRRLQCFPQPPKQNWFWGHQGLVTPTEEGMKTLTQLVTTYPQGFKLWLGPTFPLLILCHPDIIRPITSASAAVAPKDMIFYGFLKPWLGDGLLLSGGDKWSRHRRMLTPAFHFNILKPYMKIFNKSVNIMHDKWQRLASEGSARLDMFEHISLMTLDSLQKCVFSFESNCQEKPSEYIAAILELSAFVEKRNQQILLHTDFLYYLTPDGQRFRRACHLVHDFTDAVIQERRCTLPTQGIDDFLKNKAKSKTLDFIDVLLLSKDEDGKELSDEDIRAEADTFMFEGHDTTASGLSWVLYHLAKHPEYQEQCRQEVQELLKDREPIEIEWDDLAQLPFLTMCIKESLRLHPPVPVISRCCTQDFVLPDGRVIPKGIVCLINIIGIHYNPTVWPDPEVYDPFRFDQENIKERSPLAFIPFSAGPRNCIGQAFAMAEMKVVLALTLLHFRILPTHTEPRRKPELILRAEGGLWLRVEPLGANSQ"
+    ref = "MSQLSLSWLGLWPVAASPWLLLLLVGASWLLAHVLAWTYAFYDNCRRLRCFPQPPRRNWFWGHQGMVNPTEEGMRVLTQLVATYPQGFKVWMGPISPLLSLCHPDIIRSVINASAAIAPKDKFFYSFLEPWLGDGLLLSAGDKWSRHRRMLTPAFHFNILKPYMKIFNESVNIMHAKWQLLASEGSACLDMFEHISLMTLDSLQKCVFSFDSHCQEKPSEYIAAILELSALVSKRHHEILLHIDFLYYLTPDGQRFRRACRLVHDFTDAVIQERRRTLPSQGVDDFLQAKAKSKTLDFIDVLLLSKDEDGKKLSDEDIRAEADTFMFEGHDTTASGLSWVLYHLAKHPEYQERCRQEVQELLKDREPKEIEWDDLAHLPFLTMCMKESLRLHPPVPVISRHVTQDIVLPDGRVIPKGIICLISVFGTHHNPAVWPDPEVYDPFRFDPENIKERSPLAFIPFSAGPRNCIGQTFAMAEMKVVLALTLLRFRVLPDHTEPRRKPELVLRAEGGLWLRVEPLS"
+    seeds = [(0, 0)]
+    k = 4
+    matrix = BLOSUM62
+    match = None
+    mismatch = None
+    gapOpen = 5
+    gapExtend = 2
+    Xdrop_ungap = 20
+    Xdrop_gap = 30
+    Xdrop_gapFinal = 100
+    s1 = 10
+
+    print(BLOSUM62)
+
+    print()
+
+    print("q:", query)
+    print("r:", ref)
+
+    result = extendFromSeeds(ref, query, seeds, k, s1, matrix, match, mismatch, gapOpen, gapExtend, Xdrop_ungap, Xdrop_gap, Xdrop_gapFinal)
+    
+    print(result)
+
+
+
+if __name__ == "__main__":
+    main()
