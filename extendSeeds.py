@@ -38,7 +38,7 @@ def extendFromSeeds(ref, query, seeds, k, s1, matrix, match, mismatch, gapOpen, 
         if ungapped["score"] >= s1:
             ungapped_hits.append(ungapped)
 
-    print(f"UNGAPPED HITS: {ungapped_hits}")
+    #print(f"UNGAPPED HITS: {ungapped_hits}")
 
     if not ungapped_hits:
         return None
@@ -58,7 +58,7 @@ def extendFromSeeds(ref, query, seeds, k, s1, matrix, match, mismatch, gapOpen, 
             best_score = gapped["score"]
             best_alignment = gapped
 
-    print(f"GAPPED: {best_score}")
+    #print(f"GAPPED: {best_score}")
 
     return best_alignment
 
@@ -127,7 +127,6 @@ def ungappedExtension(query, ref, q_start, r_start, k, matrix=None, match=None, 
         "q_seed": q_start,
         "r_seed": r_start
     }
-
 
 def affineGappedExtension(query, ref, q_seed, r_seed, matrix=None, match=None, mismatch=None, gapOpen=5, gapExtend=2, Xdrop=30, Xdrop_final=100):
     """
@@ -244,6 +243,7 @@ def affineGappedExtension(query, ref, q_seed, r_seed, matrix=None, match=None, m
     return {
         "score": best_score,
         "alignment": (aligned_q, aligned_r),
+        "position": best_pos,
         "query_coverage": q_cov
     }
 
@@ -359,16 +359,16 @@ def main():
     Xdrop_gapFinal = 100
     s1 = 10
 
-    print(BLOSUM62)
+    #print(BLOSUM62)
 
-    print()
+    #print()
 
-    print("q:", query)
-    print("r:", ref)
+    #print("q:", query)
+    #print("r:", ref)
 
     result = extendFromSeeds(ref, query, seeds, k, s1, matrix, match, mismatch, gapOpen, gapExtend, Xdrop_ungap, Xdrop_gap, Xdrop_gapFinal)
     
-    print(result)
+    #print(result)
 
 
 
