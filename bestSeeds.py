@@ -1,4 +1,5 @@
 from itertools import product
+from extendSeeds import scorePair
 
 ##### NOTES FOR LATER: #####
 """
@@ -34,27 +35,26 @@ def Indexation(ref, k):
 
 # Input: two DNA strings ref and query, an int k, scoring parameters and and HSSP threshold
 # Output: a 2d list of seeds represented as [start coord in query, start coord in ref]
-def BestSeeds(ref, query, k, matchScore, mismatchPen, threshHSSP):
+def BestSeeds(ref, query, k, matchScore, mismatchPen, matrix, threshHSSP):
     d = EncodedIndexation(ref, k)
-    # bst = ConstructRefKmerBST(d)
     seeds = []
+    allPossibleKmers = GenerateAllKmers(k)
     for i in range(len(query)+1-k):
         qKmer = query[i:i+k]
 
         # generate a list kmers, including qKmer, with an ungapped alignment at or above the HSSP threshold
-        allPossibleKmers = GenerateAllKmers(k)
         potentialHSSPs = []
         for kmer in allPossibleKmers:
-            score = ScoreKmers(qKmer, kmer, matchScore, mismatchPen)
+            score = scorePair(qKmer, kmer, matrix, matchScore, mismatchPen)
             if score >= threshHSSP:
-                potentialHSSPs.append(kmer)
+                potentialHSSPs.append((kmer, score))
 
         # if a potential HSSP matches a reference kmer in d, save the qKmer start position (i) and the rKmer start position(s) (d[HSSP])
-        for kmer in potentialHSSPs:
+        for kmer, score in potentialHSSPs:
              check = KmerNumericalEncoding(kmer)
              if check in d:
                 for pos in d[check]:
-                    match = [i, pos]
+                    match = [i, pos, score]
                     seeds.append(match)          
 
         """

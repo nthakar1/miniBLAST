@@ -64,34 +64,3 @@ BLASTP_PARAMS = BlastConfig(
     xdrop_gap_final=25, # heuristic value in bits for final gapped alignment, as long as Maximum Score Observed - Current Score <x we can continue, otherwise we trim alignment back to where the max score was found
     threshold_T=11 # need a score of >=11 to seed a kmer that will move to the extension phase (relatively low to increase sensitivity)
 )
-
-
-# Not actually using these currently but we'll see
-
-class RefSeqNode:
-    def __init__(self, kmer):
-        self.kmer = kmer
-        self.pos = None
-        self.left = None
-        self.right = None
-
-class BST:
-    def __init__(self):
-        self.root = None
-
-    def buildTreeFromDictionary(self, d):
-        keys = sorted(d.items())
-        self.root = self._build(keys, 0, len(d)-1)
-
-    def _build(self, d, leftIndex, rightIndex):
-        if leftIndex > rightIndex:
-            return None
-        
-        midIndex = (leftIndex + rightIndex) // 2
-        node = RefSeqNode(d[midIndex])
-
-        node.left = self._build(d, leftIndex, midIndex-1)
-        node.right = self._build(d, midIndex+1, rightIndex)
-
-        return node
-    

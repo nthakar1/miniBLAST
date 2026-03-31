@@ -26,13 +26,13 @@ For nucleotide alignment, we keep match/mismatch. For protein alignment we want 
 def extendFromSeeds(ref, query, seeds, k, s1, matrix, match, mismatch, gapOpen, gapExtend, Xdrop_ungap, Xdrop_gap, Xdrop_final):
     """
     Extends all seeds and returns the best scoring alignment.
-    Assuming seeds is given as a tuple of starting indices with (query_kmer_start, ref_kmer_start).
+    Assuming seeds is given as a tuple of starting indices with (query_kmer_start, ref_kmer_start, seed_score).
     """
 
     # ungapped on all HSSPs
     ungapped_hits = []
-    for q_start, r_start in seeds:
-        ungapped = ungappedExtension(query, ref, q_start, r_start, k, matrix, match, mismatch, Xdrop_ungap)
+    for q_start, r_start, seed_score in seeds:
+        ungapped = ungappedExtension(query, ref, q_start, r_start, seed_score, k, matrix, match, mismatch, Xdrop_ungap)
 
         # S1-threshold filtering
         if ungapped["score"] >= s1:
@@ -62,21 +62,27 @@ def extendFromSeeds(ref, query, seeds, k, s1, matrix, match, mismatch, gapOpen, 
 
     return best_alignment
 
-def ungappedExtension(query, ref, q_start, r_start, k, matrix=None, match=None, mismatch=None, Xdrop=20):
+# MAKAYLA UPDATED SEED SCORE TO BE INHERENT TO SEED
+def ungappedExtension(query, ref, q_start, r_start, seed_score, k, matrix=None, match=None, mismatch=None, Xdrop=20):
     """
     Ungapped extension with Xdrop centered around the seed.
     Returns dict with score, boundaries, and alignment strings.
     """
 
-    # score the seed
+    # score the seed 
+    # for runtime, now done in bestSeeds, imported as seed_score
+    """
     curr_score = 0
     for i in range(k):
         curr_score += scorePair(query[q_start+i], ref[r_start+i], matrix, match, mismatch)
+    """
 
     # extend right
     i = k
-    temp_score = curr_score
-    best_right_score = curr_score
+    #temp_score = curr_score
+    #best_right_score = curr_score
+    temp_score = seed_score
+    best_right_score = seed_score
     right_end = k
 
     while q_start + i < len(query) and r_start + i < len(ref):
@@ -94,8 +100,10 @@ def ungappedExtension(query, ref, q_start, r_start, k, matrix=None, match=None, 
     
     # extend left
     i = 1
-    temp_score = curr_score
-    best_left_score = curr_score
+    #temp_score = curr_score
+    #best_left_score = curr_score
+    temp_score = seed_score
+    best_left_score = seed_score
     left_start = 0
 
     while q_start - i >= 0 and r_start - i >= 0:
@@ -120,7 +128,7 @@ def ungappedExtension(query, ref, q_start, r_start, k, matrix=None, match=None, 
     aligned_r = ref[r_left:r_right]
 
     return {
-        "score": best_left_score + best_right_score - curr_score,
+        "score": best_left_score + best_right_score - seed_score,
         "alignment": (aligned_q, aligned_r),
         "q_range": (q_left, q_right),
         "r_range": (r_left, r_right),
@@ -128,6 +136,7 @@ def ungappedExtension(query, ref, q_start, r_start, k, matrix=None, match=None, 
         "r_seed": r_start
     }
 
+# MAKAYLA UPDATED LOOP AT LINE 169
 def affineGappedExtension(query, ref, q_seed, r_seed, matrix=None, match=None, mismatch=None, gapOpen=5, gapExtend=2, Xdrop=30, Xdrop_final=100):
     """
     Row-based DP with X-drop extension + affine gap penalties moving rightwards. Returns alignment and associated score. Removed "free ride" edges, since we require the alignment to anchor at the seed.
@@ -157,6 +166,8 @@ def affineGappedExtension(query, ref, q_seed, r_seed, matrix=None, match=None, m
         layer_best = float("-inf")
 
         for i in range(-d, d+1):
+        #CLAUDE SUGGESTS THIS TO IMPROVE RUNTIME BUT I DONT GET THE LOGIC
+        #for i in range(max(-d, -max_band), min(d, max_band) + 1):
             j = d
 
             qi = q_seed + i

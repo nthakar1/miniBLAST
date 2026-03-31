@@ -39,11 +39,11 @@ def TwoHitSeeds(single_hits, k, A):
 
     # group hits by their diagonal (q_pos - r_pos)
     diagonals = {}
-    for q_pos, r_pos in single_hits:
+    for q_pos, r_pos, score in single_hits:
         diag = q_pos - r_pos
         if diag not in diagonals:
             diagonals[diag] = []
-        diagonals[diag].append([q_pos, r_pos])
+        diagonals[diag].append([q_pos, r_pos, score])
 
     # check proximity and trigger extension
     valid_seeds = []

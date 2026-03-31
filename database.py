@@ -60,7 +60,7 @@ def fetch_sequences_batch(query, db="nucleotide", max_results=500):
     for i in range(0, len(ids), batch_size):
         batch = ids[i:i + batch_size]
         handle = Entrez.efetch(db=db, id=batch, rettype="fasta", retmode="text")
-        records = list(SeqIO.parse(handle, "fasta"))
+        records = list(SeqIO.parse(handle, "fasta-pearson"))
         handle.close()
         all_records.extend(records)
         time.sleep(0.34)  # Respect NCBI rate limits
