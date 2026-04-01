@@ -157,7 +157,11 @@ def main():
 
         # each alignment is the best alignment between the query and that ref, as a dictionary containing score, alignment, position, and coverage
 
-        ### QUESTIONS/COMMENTS: updated to be actual position, pct_identity is output now. 
+        ### QUESTIONS/COMMENTS: updated to be actual position, pct_identity is output now.
+        # Figure out how to round metrics (.2f) when writing to csv (or just round when returning)
+        # Add query organism/sequence
+        # For every entry, return organism too
+        # Visualization: genome map with aligned sequences
         alignment = miniBLASTn(ref, query, 20, 40)
         alignments.append(alignment)
 
