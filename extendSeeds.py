@@ -336,6 +336,33 @@ def computeQueryCov(query, aligned_query):
     q_cov = (aligned_chars / len(query)) * 100
     return q_cov
 
+def computeKmerCoverage(query, seeds, k):
+    """Returns the percent of query k-mer start positions that produced at least one 
+    seed against the reference, calculated as unique seeded positions / total k-mer positions * 100."""
+    total_kmer_positions = len(query) - k + 1
+    if total_kmer_positions <= 0 or not seeds:
+        return 0.0
+
+    seeded_positions = {q_pos for q_pos, _ in seeds}
+    valid_seeded = seeded_positions & set(range(total_kmer_positions))
+    return (len(valid_seeded) / total_kmer_positions) * 100
+
+def computePercentIdentity(aligned_query, aligned_ref):
+    """Returns the percent of alignment positions where both sequences share the 
+    same non-gap residue, calculated as identical positions / alignment length * 100."""
+    if len(aligned_query) != len(aligned_ref):
+        raise ValueError(f"Aligned sequences must be the same length "
+                         f"(got {len(aligned_query)} vs {len(aligned_ref)})")
+    alignment_length = len(aligned_query)
+    if alignment_length == 0:
+        return 0.0
+
+    identical = sum(
+        1 for a, b in zip(aligned_query, aligned_ref)
+        if a == b and a != "-" and b != "-"
+    )
+    return (identical / alignment_length) * 100
+
 def scorePair(a, b, matrix=None, match=None, mismatch=None):
     """
     General scoring function:
