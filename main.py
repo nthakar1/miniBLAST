@@ -157,8 +157,8 @@ def main():
 
         # each alignment is the best alignment between the query and that ref, as a dictionary containing score, alignment, position, and coverage
 
-        ### QUESTIONS/COMMENTS: is position position in reference? where are % identity and stat values being output? makayl updated extend seeds functions slightly to try to improve runtime (see comments above functions in that file)
-        alignment = miniBLASTn(query, ref, 20, 40)
+        ### QUESTIONS/COMMENTS: updated to be actual position, pct_identity is output now. 
+        alignment = miniBLASTn(ref, query, 20, 40)
         alignments.append(alignment)
 
     sum(i**2 for i in range(1000000))
@@ -167,7 +167,7 @@ def main():
     print("Finished aligning to database. Time elapsed:", round((endTime-startTime), 5)/60, "minutes")
 
     with open("blast_results.csv", "w", newline="") as f:
-      w = csv.DictWriter(f, fieldnames=["score", "alignment", "position", "query_coverage"])
+      w = csv.DictWriter(f, fieldnames=["score", "alignment", "position", "query_coverage", "pct_identity"])
       w.writeheader() 
       w.writerows(a for a in alignments if a is not None)
     print("Results writen to csv!")

@@ -249,13 +249,18 @@ def affineGappedExtension(query, ref, q_seed, r_seed, matrix=None, match=None, m
     aligned_q, aligned_r = backtrack(query, ref, q_seed, r_seed, back, best_pos, best_state, best_score, Xdrop_final, matrix, match, mismatch, gapOpen, gapExtend)
 
     q_cov = computeQueryCov(query, aligned_q)
-    # compute percent identity later
+    pct_identity = computePercentIdentity(aligned_q, aligned_r)
+
+    i, j = best_pos
+    actual_q_pos = q_seed + i
+    actual_r_pos = r_seed + j
 
     return {
         "score": best_score,
         "alignment": (aligned_q, aligned_r),
-        "position": best_pos,
-        "query_coverage": q_cov
+        "position": (actual_q_pos, actual_r_pos),
+        "query_coverage": q_cov,
+        "pct_identity": pct_identity
     }
 
 def backtrack(query, ref, q_seed, r_seed, back, start_pos, start_state, best_score, Xdrop, matrix, match, mismatch, gapOpen, gapExtend):
@@ -336,6 +341,21 @@ def computeQueryCov(query, aligned_query):
     q_cov = (aligned_chars / len(query)) * 100
     return q_cov
 
+def scorePair(a, b, matrix=None, match=None, mismatch=None):
+    """
+    General scoring function:
+    - protein: takes BLOSUM as substitution matrix
+    - nucleotide: no matrix passed, use simple match/mismatch
+    """
+
+    if matrix is not None:
+        return matrix[a][b]
+    else:
+        if a == b:
+            return match
+        else:
+            return -mismatch
+        
 def computeKmerCoverage(query, seeds, k):
     """Returns the percent of query k-mer start positions that produced at least one 
     seed against the reference, calculated as unique seeded positions / total k-mer positions * 100."""
@@ -362,22 +382,6 @@ def computePercentIdentity(aligned_query, aligned_ref):
         if a == b and a != "-" and b != "-"
     )
     return (identical / alignment_length) * 100
-
-def scorePair(a, b, matrix=None, match=None, mismatch=None):
-    """
-    General scoring function:
-    - protein: takes BLOSUM as substitution matrix
-    - nucleotide: no matrix passed, use simple match/mismatch
-    """
-
-    if matrix is not None:
-        return matrix[a][b]
-    else:
-        if a == b:
-            return match
-        else:
-            return -mismatch
-        
 
 def main():
 

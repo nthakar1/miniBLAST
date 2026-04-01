@@ -79,11 +79,13 @@ def EncodedIndexation(ref, k):
     d = {}
     for i in range(len(ref)+1-k):
         kmer = ref[i:i+k]
-        kmer = KmerNumericalEncoding(kmer)
-        if kmer not in d:
-            d[kmer] = [i]
+        code = KmerNumericalEncoding(kmer)
+        if code is None:
+            continue
+        if code not in d:
+            d[code] = [i]
         else:
-            d[kmer].append(i)
+            d[code].append(i)
     return d
 
 # Input: a kmer string
@@ -94,6 +96,9 @@ def KmerNumericalEncoding(kmer):
     res = 0
     for pos in range(k):
         base = kmer[pos]
+        # skip if not in encodingDict (like for N, other ambigious nucleotides)
+        if base not in encodingDict:
+            return None
         val = encodingDict[base]
         res += val * (4**(k-pos-1))
     return res
