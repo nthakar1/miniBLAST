@@ -111,11 +111,13 @@ def GenerateAllKmers(k):
     
 # Input: two kmers of the same length and two scoring parameters
 # Output: the score of the ungapped alignment between the kmers
+# Need to add matrix param and update the function calls to account for this so we can do protein seqs too
 def ScoreKmers(qKmer, rKmer, matchScore, mismatchPen):
     """
     Redudant with current scoreKmers function in extendSeeds.py, waiting for updated version that uses nucleotide BLOSUM equivalent
     """
     score = 0
+    # To use scorePairs, just update this loop to use scorePair instead of the if/else conditions -- Sriya
     for i in range(len(qKmer)):
         if qKmer[i] == rKmer[i]:
             score += matchScore
