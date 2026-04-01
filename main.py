@@ -41,7 +41,7 @@ def miniBLASTn(ref, query, s1, A):
     Xdrop_final=BLASTN_PARAMS.xdrop_gap_final
 
     seedMismatchAllowed = k/3
-    threshHSSP = matchReward*(k-seedMismatchAllowed) + mismatchPen*(seedMismatchAllowed)
+    threshHSSP = matchReward*(k-seedMismatchAllowed) - mismatchPen*(seedMismatchAllowed)
 
     startTime = time.perf_counter()
     singleSeeds = BestSeeds(ref, query, k, matchReward, mismatchPen, matrix, threshHSSP)
@@ -158,7 +158,7 @@ def main():
         # each alignment is the best alignment between the query and that ref, as a dictionary containing score, alignment, position, and coverage
 
         ### QUESTIONS/COMMENTS: is position position in reference? where are % identity and stat values being output? makayl updated extend seeds functions slightly to try to improve runtime (see comments above functions in that file)
-        alignment = miniBLASTn(query, ref, 0, float("inf"))
+        alignment = miniBLASTn(query, ref, 20, 40)
         alignments.append(alignment)
 
     sum(i**2 for i in range(1000000))
@@ -167,9 +167,9 @@ def main():
     print("Finished aligning to database. Time elapsed:", round((endTime-startTime), 5)/60, "minutes")
 
     with open("blast_results.csv", "w", newline="") as f:
-      w = csv.DictWriter(f, fieldnames=["score", "alignment", "position", "coverage"])
+      w = csv.DictWriter(f, fieldnames=["score", "alignment", "position", "query_coverage"])
       w.writeheader() 
-      w.writerows(alignments)
+      w.writerows(a for a in alignments if a is not None)
     print("Results writen to csv!")
 
 

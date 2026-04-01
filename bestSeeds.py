@@ -45,7 +45,7 @@ def BestSeeds(ref, query, k, matchScore, mismatchPen, matrix, threshHSSP):
         # generate a list kmers, including qKmer, with an ungapped alignment at or above the HSSP threshold
         potentialHSSPs = []
         for kmer in allPossibleKmers:
-            score = scorePair(qKmer, kmer, matrix, matchScore, mismatchPen)
+            score = ScoreKmers(qKmer, kmer, matchScore, mismatchPen)
             if score >= threshHSSP:
                 potentialHSSPs.append((kmer, score))
 

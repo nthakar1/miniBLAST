@@ -46,7 +46,7 @@ class BlastConfig:
 BLASTN_PARAMS = BlastConfig(
     name="blastn",
     match_reward=2,
-    mismatch_penalty=-3,
+    mismatch_penalty=3,
     gap_opening=5,
     gap_extension=2,
     k_mer_size=7
