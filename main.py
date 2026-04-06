@@ -1,11 +1,13 @@
 from bestSeeds import BestSeeds
+from bestSeeds import GenerateAllKmers
+from bestSeeds import EncodedIndexation
 from extendSeeds import extendFromSeeds
 from TwoHit import TwoHitSeeds
 from datatypes import BLASTN_PARAMS, BLASTP_PARAMS, BlastConfig
 from database import fetch_mixed_database
 
 from Bio import SeqIO
-import csv
+import pandas as pd
 import time
 
 def miniBLASTn(ref, query, s1, A):
@@ -137,6 +139,7 @@ def main():
     
     # could consider computing once and storing--time vs memory
     db_h1n1 = fetch_mixed_database(queriesViral, "h1n1_mixed_database.fasta")
+    # BUILD AND SAVE ENCODED INDEXATION FILE FOR WHOLE DATABASE RATHER THAN COMPUTING FOT EACH REFERENCE
 
     sum(i**2 for i in range(1000000))
     endTime = time.perf_counter()
@@ -145,6 +148,7 @@ def main():
 
     query = segments[0]
     alignments = []
+    ref_descriptions = []
 
     # for test: only aligning to 10 of the roughly 1000 sequences in the database
     startTime = time.perf_counter()
@@ -154,6 +158,9 @@ def main():
 
         record = db_h1n1[i]
         ref = str(record.seq)
+
+        source = record.description
+        ref_descriptions.append(source)
 
         # each alignment is the best alignment between the query and that ref, as a dictionary containing score, alignment, position, and coverage
 
@@ -170,10 +177,11 @@ def main():
     print()
     print("Finished aligning to database. Time elapsed:", round((endTime-startTime), 5)/60, "minutes")
 
-    with open("blast_results.csv", "w", newline="") as f:
-      w = csv.DictWriter(f, fieldnames=["score", "alignment", "position", "query_coverage", "pct_identity"])
-      w.writeheader() 
-      w.writerows(a for a in alignments if a is not None)
+    # write results to a csv
+    df = pd.DataFrame([field for field in alignments if field is not None])
+    df.insert(0, "aligned to", ref_descriptions)
+    df.to_csv("blast_results.csv", index=False)
+
     print("Results writen to csv!")
 
 

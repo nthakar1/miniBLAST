@@ -1,36 +1,10 @@
 from itertools import product
 from extendSeeds import scorePair
+import time
 
 ##### NOTES FOR LATER: #####
 """
 - Will want to account for IUPAC nucleotide ambiguity codes during indexation and scoring (reference or query seqs with degenerated bases)
-"""
-
-"""
-# Input: two DNA string query and ref, an int k, scores for matches and mismatches, and a threshold score defining an HSSP
-# Output: the highest scoring segment pairs (HSSPs) to be used as seeds for the local alignments. 
-def BestSeeds(ref, query, k, matchScore, mismatchPen, threshHSSP):
-    d = Indexation(ref, k)
-    HSSPs = {} # a dictionary mapping the kmer from the reference to a tuple of indeces where the alignment occured ([indecesInRef], indexInQuery)
-    for i in range(len(query)+1-k):
-        qKmer = query[i:i+k]
-        for rKmer, positions in d.items():
-            score = ScoreKmers(qKmer, rKmer, matchScore, mismatchPen)
-            if score >= threshHSSP:
-                HSSPs[rKmer] = (positions, i)
-    return HSSPs
-
-# Input: a DNA string ref and an int k
-# Output: a dictionary mapping each kmer in ref to a list of start positions 
-def Indexation(ref, k):
-    d = {}
-    for i in range(len(ref)+1-k):
-        kmer = ref[i:i+k]
-        if kmer not in d:
-            d[kmer] = [i]
-        else:
-            d[kmer].append(i)
-    return d
 """
 
 # Input: two DNA strings ref and query, an int k, scoring parameters and and HSSP threshold
@@ -38,14 +12,14 @@ def Indexation(ref, k):
 def BestSeeds(ref, query, k, matchScore, mismatchPen, matrix, threshHSSP):
     d = EncodedIndexation(ref, k)
     seeds = []
-    allPossibleKmers = GenerateAllKmers(k)
+    allPossibleKmers = GenerateAllKmers(k) # move outside this function?
     for i in range(len(query)+1-k):
         qKmer = query[i:i+k]
 
         # generate a list kmers, including qKmer, with an ungapped alignment at or above the HSSP threshold
-        potentialHSSPs = []
+        potentialHSSPs = [] # FIND A DIFFERENT WAY TO GENERATE THIS
         for kmer in allPossibleKmers:
-            score = ScoreKmers(qKmer, kmer, matchScore, mismatchPen)
+            score = ScoreKmers(qKmer, kmer, matrix, matchScore, mismatchPen)
             if score >= threshHSSP:
                 potentialHSSPs.append((kmer, score))
 
@@ -56,20 +30,6 @@ def BestSeeds(ref, query, k, matchScore, mismatchPen, matrix, threshHSSP):
                 for pos in d[check]:
                     match = [i, pos, score]
                     seeds.append(match)          
-
-        """
-        # for each potential HSSP, search the bst for matches
-        # for each match, save the qKmer start position (i) and the rKmer start position(s) (given in bst)
-        for check in potentialHSSPs:
-            # will return a tuple if a match is found
-            match = SearchRefKmerBST(check, bst)
-            if match != None:
-                # might be multiple match positions in ref
-                matchPositions = match[1]
-                for pos in matchPositions:
-                    coords = [i, pos]
-                    seeds.append(coords)
-        """
 
     return seeds
 
@@ -111,31 +71,14 @@ def GenerateAllKmers(k):
     
 # Input: two kmers of the same length and two scoring parameters
 # Output: the score of the ungapped alignment between the kmers
-# Need to add matrix param and update the function calls to account for this so we can do protein seqs too
-def ScoreKmers(qKmer, rKmer, matchScore, mismatchPen):
-    """
-    Redudant with current scoreKmers function in extendSeeds.py, waiting for updated version that uses nucleotide BLOSUM equivalent
-    """
+def ScoreKmers(qKmer, rKmer, matrix, matchScore, mismatchPen):
     score = 0
-    # To use scorePairs, just update this loop to use scorePair instead of the if/else conditions -- Sriya
     for i in range(len(qKmer)):
+        score += scorePair(qKmer[i], rKmer[i], matrix, matchScore, mismatchPen)
         if qKmer[i] == rKmer[i]:
             score += matchScore
         else:
             score -= mismatchPen
+
     return score 
 
-
-"""
-# Input: a dictionary mapping numerically-encoded kmers in ref to a list of their start positions in ref
-# Output: a bst where nodes are key, value pairs in the dictionary
-def ConstructRefKmerBST(d):
-    tree = BST()
-    for kmer in sorted(d):
-        startPositions = d[kmer]
-        if tree.root == None:
-            tree.root = RefSeqNode(kmer)
-            tree.root.pos = startPositions
-        node = RefSeqNode
-    pass
-"""
