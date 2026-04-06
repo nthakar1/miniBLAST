@@ -2,7 +2,7 @@ from bestSeeds import BestSeeds
 from bestSeeds import GenerateAllKmers
 from bestSeeds import EncodedIndexation
 from extendSeeds import extendFromSeeds
-from TwoHit import TwoHitSeeds
+from twoHit import TwoHitSeeds
 from datatypes import BLASTN_PARAMS, BLASTP_PARAMS, BlastConfig
 from database import fetch_mixed_database
 
