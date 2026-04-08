@@ -1,4 +1,6 @@
 from bestSeeds import BestSeeds
+from bestSeeds import GenerateAllKmers
+from bestSeeds import EncodedIndexation
 from extendSeeds import extendFromSeeds
 from TwoHit import TwoHitSeeds
 from datatypes import BLASTN_PARAMS, BLASTP_PARAMS, BlastConfig, BLOSUM
@@ -138,6 +140,7 @@ def main():
     
     # could consider computing once and storing--time vs memory
     db_h1n1 = fetch_mixed_database(queriesViral, "h1n1_mixed_database.fasta")
+    # BUILD AND SAVE ENCODED INDEXATION FILE FOR WHOLE DATABASE RATHER THAN COMPUTING FOT EACH REFERENCE
 
     sum(i**2 for i in range(1000000))
     endTime = time.perf_counter()
@@ -146,6 +149,7 @@ def main():
 
     query = segments[0]
     alignments = []
+    ref_descriptions = []
 
     # for test: only aligning to 10 of the roughly 1000 sequences in the database
     startTime = time.perf_counter()
@@ -155,6 +159,9 @@ def main():
 
         record = db_h1n1[i]
         ref = str(record.seq)
+
+        source = record.description
+        ref_descriptions.append(source)
 
         # each alignment is the best alignment between the query and that ref, as a dictionary containing score, alignment, position, and coverage
 
