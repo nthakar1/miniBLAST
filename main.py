@@ -1,8 +1,9 @@
 from bestSeeds import BestSeeds
 from extendSeeds import extendFromSeeds
 from TwoHit import TwoHitSeeds
-from datatypes import BLASTN_PARAMS, BLASTP_PARAMS, BlastConfig
+from datatypes import BLASTN_PARAMS, BLASTP_PARAMS, BlastConfig, BLOSUM
 from database import fetch_mixed_database
+from statistics import calculate_bit_score, calculate_e_value
 
 from Bio import SeqIO
 import csv
@@ -162,7 +163,10 @@ def main():
         # Add query organism/sequence
         # For every entry, return organism too
         # Visualization: genome map with aligned sequences
-        alignment = miniBLASTn(ref, query, 20, 40)
+        alignment = miniBLASTn(ref, query, s1=20, A=40)
+        if alignment:
+            alignment["bit_score"] = round(calculate_bit_score(alignment["score"], BLASTN_PARAMS), 4)
+            alignment["e_value"]   = round(calculate_e_value(alignment["score"], len(query), len(db_h1n1), BLASTN_PARAMS), 4)
         alignments.append(alignment)
 
     sum(i**2 for i in range(1000000))
@@ -171,7 +175,7 @@ def main():
     print("Finished aligning to database. Time elapsed:", round((endTime-startTime), 5)/60, "minutes")
 
     with open("blast_results.csv", "w", newline="") as f:
-      w = csv.DictWriter(f, fieldnames=["score", "alignment", "position", "query_coverage", "pct_identity"])
+      w = csv.DictWriter(f, fieldnames=["score", "bit_score", "e_value", "alignment", "position", "query_coverage", "pct_identity"])
       w.writeheader() 
       w.writerows(a for a in alignments if a is not None)
     print("Results writen to csv!")

@@ -12,8 +12,9 @@ Run with:
 from bestSeeds import BestSeeds
 from TwoHit import TwoHitSeeds
 from extendSeeds import extendFromSeeds, ungappedExtension
-from main import miniBLAST
-from matrices import BLASTN_PARAMS, BLASTP_PARAMS, BLOSUM62
+from main import miniBLASTn
+from datatypes import BLASTN_PARAMS, BLASTP_PARAMS, BLOSUM
+from statistics import calculate_bit_score, calculate_e_value
 
 # Test runner
 
@@ -49,7 +50,7 @@ def test_best_seeds_exact_match():
     ref   = "GGATCGATCGCC"     # contains "ATCG" at positions 2 and 6
     k, match, mismatch, thresh = 4, 2, 3, 8   # thresh = 4*2 → exact only
 
-    seeds = BestSeeds(ref, query, k, match, mismatch, thresh)
+    seeds = BestSeeds(ref, query, k, match, mismatch, None, thresh)
     print(f"  Seeds: {seeds}")
     assert len(seeds) > 0, "Expected at least one seed for a verbatim kmer match"
 
@@ -171,7 +172,7 @@ def test_ungapped_perfect_seed():
     query = "ATCGATCG"
     ref   = "GGATCGATCGCC"
     result = ungappedExtension(query, ref,
-                               q_start=0, r_start=2,
+                               q_start=0, r_start=2, seed_score=0,
                                k=4, matrix=None, match=2, mismatch=3, Xdrop=20)
     print(f"  Ungapped result: {result}")
     assert result["score"] > 0, "Expected positive ungapped score"
@@ -183,8 +184,9 @@ def test_ungapped_returns_required_keys():
     """
     query = "AAATGCCATGAA"
     ref   = "TTATGCCATGTT"
+    
     result = ungappedExtension(query, ref,
-                               q_start=2, r_start=2,
+                               q_start=2, r_start=2,seed_score=0,
                                k=3, matrix=None, match=2, mismatch=3, Xdrop=20)
     print(f"  Keys: {list(result.keys())}")
     for key in ("score", "alignment", "q_range", "r_range", "q_seed", "r_seed"):
@@ -192,21 +194,6 @@ def test_ungapped_returns_required_keys():
 
 
 #   End-to-end / integration tests  (full pipeline via miniBLAST)
-
-# Shorthand for BLAST-style DNA parameters (scaled down for short sequences)
-_DNA = dict(
-    k            = 3,
-    matchReward  = 2,
-    mismatchPen  = 3,
-    gapOpenPen   = 5,
-    gapExtendPen = 2,
-    threshHSSP   = 6,    # exact 3-mer match only (3*2 = 6)
-    s1           = 4,
-    Xdrop_ungap  = 20,
-    Xdrop_gap    = 30,
-    Xdrop_final  = 60,
-    A            = 20,
-)
 
 
 def test_e2e_high_similarity_dna():
@@ -216,7 +203,7 @@ def test_e2e_high_similarity_dna():
     query = "AAATGCCCATGAA"
     ref   = "TTATGCCCATGTT"
 
-    result = miniBLAST(ref, query, **_DNA)
+    result = miniBLASTn(ref, query, s1=20, A=40)
     print(f"  Alignment: {result['alignment'] if result else None}")
     print(f"  Score:     {result['score'] if result else None}")
     assert result is not None, "Expected a valid alignment"
@@ -233,7 +220,7 @@ def test_e2e_single_mismatch():
     query = "ATCGATCG"
     ref   = "ATCGTTCG"
 
-    result = miniBLAST(ref, query, **_DNA)
+    result = miniBLASTn(ref, query, s1=20, A=40)
     print(f"  Alignment: {result['alignment'] if result else None}")
     print(f"  Score:     {result['score'] if result else None}")
     assert result is not None, "Expected alignment despite single mismatch"
@@ -246,7 +233,7 @@ def test_e2e_no_homology():
     query = "AAAAAAAAAA"
     ref   = "CCCCCCCCCC"
 
-    result = miniBLAST(ref, query, **_DNA)
+    result = miniBLASTn(ref, query, s1=20, A=40)
     print(f"  Result: {result}")
     assert result is None, f"Expected None for no-homology case, got: {result}"
 
@@ -259,7 +246,7 @@ def test_e2e_query_is_substring():
     query = "ATCGATCG"
     ref   = "GGGGGATCGATCGCCCCC"
 
-    result = miniBLAST(ref, query, **_DNA)
+    result = miniBLASTn(ref, query, s1=20, A=40)
     print(f"  Alignment: {result['alignment'] if result else None}")
     print(f"  Score:     {result['score'] if result else None}")
     assert result is not None, "Expected alignment for exact substring"
@@ -280,7 +267,7 @@ def test_e2e_with_gap():
     query = "ATCGAATCGATCG"
     ref   = "ATCGGATCGATCG"
 
-    result = miniBLAST(ref, query, **_DNA)
+    result = miniBLASTn(ref, query, s1=20, A=40)
     print(f"  Alignment: {result['alignment'] if result else None}")
     print(f"  Score:     {result['score'] if result else None}")
     assert result is not None, "Expected alignment even with a gap"
@@ -299,7 +286,7 @@ def test_e2e_original_case():
     query = "AAATGCCCCCCATGAA"
     ref   = "TTATGGGGGGGATGTT"
 
-    result = miniBLAST(ref, query, **_DNA)
+    result = miniBLASTn(ref, query, s1=20, A=40)
     print(f"  Alignment: {result['alignment'] if result else None}")
     print(f"  Score:     {result['score'] if result else None}")
     # We just check the pipeline runs without crashing; alignment may be partial
@@ -317,18 +304,49 @@ def test_e2e_longer_realistic_dna():
     ref   = "ATGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCTAGCT"
     query = "ATGCTAGCTAGCTAGCTAGCTAGCAAGCTAGCTAGCTAGCTAGCTAGCT"
 
-    result = miniBLAST(ref, query, **_DNA)
+    result = miniBLASTn(ref, query, s1=20, A=40)
     print(f"  Score: {result['score'] if result else None}")
     print(f"  Query coverage: {result.get('query_coverage') if result else None}")
     assert result is not None, "Expected alignment for near-identical 50 bp sequences"
     assert result["score"] > 30, "Expected high score for near-perfect long alignment"
+
+# Stats testing 
+
+def test_bit_score_positive():
+    bit = calculate_bit_score(50, BLASTN_PARAMS)
+    assert bit > 0, "Bit score should be positive"
+
+def test_evalue_strong_hit():
+    eval = calculate_e_value(50, 100, 987, BLASTN_PARAMS)
+    assert 0 < eval < 1, "Strong hit E-value should be between 0 and 1"
+
+def test_evalue_increases_with_db_size():
+    e1 = calculate_e_value(50, 100, 987, BLASTN_PARAMS)
+    e2 = calculate_e_value(50, 100, 9870, BLASTN_PARAMS)
+    assert e2 > e1, "Larger database should give higher E-value"
+
+def test_evalue_decreases_with_higher_score():
+    e1 = calculate_e_value(50, 100, 987, BLASTN_PARAMS)
+    e2 = calculate_e_value(100, 100, 987, BLASTN_PARAMS)
+    assert e2 < e1, "Higher alignment score should give lower E-value"
+
+def test_evalue_weak_hit():
+    eval = calculate_e_value(5, 100, 987, BLASTN_PARAMS)
+    assert eval > 1, "Weak hit E-value should be > 1"
+
+def test_blastp_params():
+    bit = calculate_bit_score(50, BLASTP_PARAMS)
+    eval = calculate_e_value(50, 100, 987, BLASTP_PARAMS)
+    assert bit > 0
+    assert eval > 0
+
 
 
 # Main testing
 
 def main():
     print("\n" + "█"*64)
-    print("  miniBLAST test suite")
+    print("  miniBLASTn test suite")
     print("█"*64)
 
     # BestSeeds
@@ -356,6 +374,14 @@ def main():
     run_test("E2E | sequence with gap",            test_e2e_with_gap)
     run_test("E2E | original test case",           test_e2e_original_case)
     run_test("E2E | longer 50 bp near-identical",  test_e2e_longer_realistic_dna)
+
+    # Statistics
+    run_test("Statistics | bit score positive",           test_bit_score_positive)
+    run_test("Statistics | strong hit E-value < 1",       test_evalue_strong_hit)
+    run_test("Statistics | E-value scales with db size",  test_evalue_increases_with_db_size)
+    run_test("Statistics | E-value drops with score",     test_evalue_decreases_with_higher_score)
+    run_test("Statistics | weak hit E-value > 1",         test_evalue_weak_hit)
+    run_test("Statistics | BLASTP params are working as expected",           test_blastp_params)
 
     # Summary 
     total = _results["passed"] + _results["failed"]

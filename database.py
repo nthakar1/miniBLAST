@@ -1,12 +1,12 @@
 from Bio import Entrez, SeqIO
-import time
-from itertools import islice
+from Bio.Blast import NCBIXML
+import os, subprocess, time, tempfile
 
-Entrez.email = "mmccrear@nadrew.cmu.edu"
+# Install separately: biopython, blast
 
+Entrez.email = "mmccrear@andrew.cmu.edu"
 
 def fetch_mixed_database(queries, output_filename):
-    """Fetch H1N1 + diverse viral sequences for meaningful E-values."""
     
     all_records = []
     
@@ -67,9 +67,42 @@ def fetch_sequences_batch(query, db="nucleotide", max_results=500):
     
     return all_records
 
+def blastn_validation(queryFile, segment_id, dbFile):
 
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # Build DB in temp dir
+        db_tmp = os.path.join(tmpdir, "blast_db")
+        cmd = ["makeblastdb", "-in", dbFile, "-dbtype", "nucl", "-out", db_tmp]
+        subprocess.run(cmd, capture_output=True, text=True)
+
+        # Write query to temp dir
+        query_tmp = os.path.join(tmpdir, "query.fasta")
+        record = next(r for r in SeqIO.parse(queryFile, "fasta") if r.id == segment_id)
+        with open(query_tmp, "w") as out_handle:
+            SeqIO.write(record, out_handle, "fasta")
+
+        # Run BLASTN, output to temp dir
+        blast_out = os.path.join(tmpdir, "blast_out.xml")
+        blastn_cmd = ["blastn", "-query", query_tmp, "-db", db_tmp, "-outfmt", "5", "-out", blast_out]
+        result = subprocess.run(blastn_cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            raise RuntimeError(f"BLASTN failed:\nSTDOUT: {result.stdout}\nSTDERR: {result.stderr}")
+
+        # Parse before tempdir is deleted
+        with open(blast_out) as result_handle:
+            blast_records = NCBIXML.parse(result_handle)
+            for record in blast_records:
+                for alignment in record.alignments:
+                    for hsp in alignment.hsps:
+                        print(f"Hit: {alignment.title[:60]}")
+                        print(f"  E-value: {hsp.expect}")
+                        print(f"  Identity: {hsp.identities}/{hsp.align_length} ({100*hsp.identities//hsp.align_length}%)")
+                        print(f"  Query: {hsp.query_start}-{hsp.query_end}")
+    
 def main():
 
+    ### CREATE DIFFERENT DATABASES HERE TO SAVE AS FILES, IMPORT IN MAIN.PY
+    """
     queriesViral = [
         # H1N1 sequences (your target of interest)
         {
@@ -116,7 +149,14 @@ def main():
     ]
 
     # Build the database
-    mixed_db_records = fetch_mixed_database(queriesViral, "h1n1_mixed_database.fasta")
+    mixed_h1n1_db_records = fetch_mixed_database(queriesViral, "h1n1_mixed_database.fasta")
+    """
+
+    ### BLAST VALIDATION ON CUSTOM DATABASES
+    query = "human_h1n1_1934.fna"
+    segment = "NC_002023.1"
+    db = "h1n1_mixed_database.fasta"
+    blastn_validation(query, segment, db)
 
 if __name__ == "__main__":
     main()

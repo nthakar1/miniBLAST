@@ -34,6 +34,8 @@ class BlastConfig:
     gap_opening: int
     gap_extension: int
     k_mer_size: int
+    lambda_val: float
+    K: float
     # used only in protein seq, so default is none for nucleotides and we can update matrix=BLOSUM for next blastp object
     matrix: Optional[dict] = None 
     # set x drop values equal to blastn defaults, all are in bits (ie statistically normalized)
@@ -49,7 +51,10 @@ BLASTN_PARAMS = BlastConfig(
     mismatch_penalty=3,
     gap_opening=5,
     gap_extension=2,
-    k_mer_size=7
+    k_mer_size=7,
+    lambda_val=0.625,
+    K=0.41
+
     # x drop defaults auto applied
 )
 
@@ -62,5 +67,7 @@ BLASTP_PARAMS = BlastConfig(
     k_mer_size=3,
     matrix=BLOSUM, 
     xdrop_gap_final=25, # heuristic value in bits for final gapped alignment, as long as Maximum Score Observed - Current Score <x we can continue, otherwise we trim alignment back to where the max score was found
-    threshold_T=11 # need a score of >=11 to seed a kmer that will move to the extension phase (relatively low to increase sensitivity)
+    threshold_T=11, # need a score of >=11 to seed a kmer that will move to the extension phase (relatively low to increase sensitivity)
+    lambda_val=0.267,
+    K=0.041
 )
