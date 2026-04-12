@@ -12,23 +12,22 @@ from statistics import calculate_bit_score, calculate_e_value
 
 st.title("miniBLAST")
 st.write("Local alignment of nucleotide or protein sequences against a database.")
-
+#TODO: create separate tabs for miniBLASTn and miniBLASTp
 # Configurable parameters that users can change. Help text will appear as a question mark tooltip.
 st.sidebar.header("Parameters")
 s1 = st.sidebar.number_input("Ungapped extension threshold (s1)", value=20, min_value=1,
                                 help= "Minimum ungapped extension score needed to proceed to gapped alignment. Default value= 20.")
 A  = st.sidebar.number_input("Two-hit diagonal window (A)",        value=40, min_value=1,
                                 help="Maximum diagonal distance between two hits to trigger extension. Default value= 40.")
-# TODO: Change this default to 1
-step = st.sidebar.number_input("Sample every Nth reference",        value=100, min_value=1,
+step = st.sidebar.number_input("Sample every Nth reference",        value=1, min_value=1,
                                 help="1 = align against every sequence (slow), 100 = sample every 100th")
 
 # Upload a FASTA query sequence with file type= fna, fasta, or fa
-# TODO: add in a textbox for the query sequence for them to insert any custom query
 st.header("Query Sequence")
-uploaded = st.file_uploader("Upload a FASTA file (.fna / .fasta)", type=["fna", "fasta", "fa"])
+uploaded = st.file_uploader("Upload a FASTA file (.fna / .fasta):", type=["fna", "fasta", "fa"])
+raw_text=st.text_input(label= "Or type a custom sequence:")
 
-# Once a user uploads a FASTA file, check how many sequences are in the fasta file. If there is more than 1 sequence in the FASTA file, allow them to choose which sequence will be their query sequence.
+# Once a user uploads a FASTA file or types a custom sequence, check how many sequences are in the fasta file. If there is more than 1 sequence in the FASTA file, allow them to choose which sequence will be their query sequence.
 query = None
 if uploaded:
     segments = [str(r.seq) for r in SeqIO.parse(io.TextIOWrapper(uploaded, encoding="utf-8"), "fasta")]
@@ -37,13 +36,17 @@ if uploaded:
             "Select query sequence",
             range(len(segments)),
             format_func=lambda i: f"Sequence {i+1} ({len(segments[i])} bp)"
-            )
+        )
     else:
         seg_index = 0
     query = segments[seg_index]
-
     st.success(f"Loaded {len(segments)} sequence(s). Using sequence {seg_index+1}.")
     st.code(query[:80] + ("..." if len(query) > 80 else ""), language=None)
+elif raw_text.strip():
+    query = raw_text.strip()
+    st.success(f"Using typed sequence ({len(query)} bp).")
+    st.code(query[:80] + ("..." if len(query) > 80 else ""), language=None)
+
 
 # Configuring database with a dropdown menu that pulls FASTA/fna files from our repository with database in the filename. Users can select which database they want to align against.
 st.header("Database") 
