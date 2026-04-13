@@ -159,8 +159,8 @@ def affineGappedExtension(query, ref, q_seed, r_seed, matrix=None, match=None, m
     best_state = "M"
 
     # since we are no longer using the n x m matrix, need to set some limit
-    # max_band = min(len(query), len(ref)) # limit by length
-    max_band = 2 * (Xdrop // min(match, mismatch)) # limit by scoring scheme
+    max_band = min(len(query), len(ref)) # limit by length
+    # max_band = 2 * (Xdrop // min(match, mismatch)) # limit by scoring scheme
 
     for d in range(1, max_band):
         layer_best = float("-inf")
@@ -309,7 +309,7 @@ def backtrack(query, ref, q_seed, r_seed, back, start_pos, start_state, best_sco
             raise ValueError("Unexpected state during backtracking.")
         
         # update running score (working in reverse)
-        curr_score -= score
+        curr_score += score
 
         # check Xdrop condition
         if best_score - curr_score > Xdrop:
