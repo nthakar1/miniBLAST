@@ -43,7 +43,7 @@ def miniBLASTn(ref, query, s1, A):
     Xdrop_gap=BLASTN_PARAMS.xdrop_gap
     Xdrop_final=BLASTN_PARAMS.xdrop_gap_final
 
-    seedMismatchAllowed = k/3
+    seedMismatchAllowed = 1
     threshHSSP = matchReward*(k-seedMismatchAllowed) - mismatchPen*(seedMismatchAllowed)
 
     startTime = time.perf_counter()
