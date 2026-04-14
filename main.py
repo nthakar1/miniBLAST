@@ -43,7 +43,7 @@ def miniBLASTn(ref, query, s1, A):
     Xdrop_gap=BLASTN_PARAMS.xdrop_gap
     Xdrop_final=BLASTN_PARAMS.xdrop_gap_final
 
-    seedMismatchAllowed = k/3
+    seedMismatchAllowed = 1
     threshHSSP = matchReward*(k-seedMismatchAllowed) - mismatchPen*(seedMismatchAllowed)
 
     startTime = time.perf_counter()
@@ -140,7 +140,6 @@ def main():
     
     # could consider computing once and storing--time vs memory
     db_h1n1 = fetch_mixed_database(queriesViral, "h1n1_mixed_database.fasta")
-    # BUILD AND SAVE ENCODED INDEXATION FILE FOR WHOLE DATABASE RATHER THAN COMPUTING FOT EACH REFERENCE
 
     sum(i**2 for i in range(1000000))
     endTime = time.perf_counter()
