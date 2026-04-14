@@ -1,4 +1,4 @@
-from bestSeeds import BestSeeds
+from bestSeeds import BestSeeds, BestSeedsWithMasking
 from bestSeeds import GenerateAllKmers
 from bestSeeds import EncodedIndexation
 from extendSeeds import extendFromSeeds
@@ -47,7 +47,10 @@ def miniBLASTn(ref, query, s1, A):
     threshHSSP = matchReward*(k-seedMismatchAllowed) - mismatchPen*(seedMismatchAllowed)
 
     startTime = time.perf_counter()
-    singleSeeds = BestSeeds(ref, query, k, matchReward, mismatchPen, matrix, threshHSSP)
+    singleSeeds, masking_info = BestSeedsWithMasking(
+        ref=ref, query=query, k=k, matchScore=matchReward, mismatchPen=mismatchPen, matrix=None, threshHSSP=threshHSSP,
+        apply_masking=True, dust_complexity_threshold=20
+    )
     
     sum(i**2 for i in range(1000000))
     endTime = time.perf_counter()
@@ -174,13 +177,29 @@ def main():
             alignment["bit_score"] = round(calculate_bit_score(alignment["score"], BLASTN_PARAMS), 4)
             alignment["e_value"]   = round(calculate_e_value(alignment["score"], len(query), len(db_h1n1), BLASTN_PARAMS), 4)
         alignments.append(alignment)
+    
+    # Test masking integration
+    print("\n=== Testing BestSeedsWithMasking ===")
+    
+    # Simple test sequences
+    test_query = "ATCGAAAAAAAAATCG"  # Has poly-A in middle
+    test_ref = "ATCGAAAAAAAAAACG"    # Similar with poly-A
+    
+    seeds_masked, info = BestSeedsWithMasking(
+        ref=test_ref, query=test_query, k=7, 
+        matchScore=2, mismatchPen=3, matrix=None, threshHSSP=4,
+        apply_masking=True, dust_complexity_threshold=10, overlap_threshold=0.3  # More aggressive
+    )
+    
+    print(f"Seeds with masking: {len(seeds_masked)}")
+    print(f"Masking info: {info}")
 
     sum(i**2 for i in range(1000000))
     endTime = time.perf_counter()
     print()
     print("Finished aligning to database. Time elapsed:", round((endTime-startTime), 5)/60, "minutes")
 
-    with open("blast_results.csv", "w", newline="") as f:
+    with open("blast_results_VS_04142026.csv", "w", newline="") as f:
       w = csv.DictWriter(f, fieldnames=["score", "bit_score", "e_value", "alignment", "position", "query_coverage", "pct_identity"])
       w.writeheader() 
       w.writerows(a for a in alignments if a is not None)
