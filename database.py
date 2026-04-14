@@ -2,7 +2,32 @@ from Bio import Entrez, SeqIO
 from Bio.Blast import NCBIXML
 import os, subprocess, time, tempfile
 
-# Install separately: biopython, blast
+"""
+Installation requirements: biopython, blast
+
+Instructions for use:
+
+To generate a database, first create a list of queries, formatted as follows:
+    queries = [ 
+    { "query" : "example_search_term[example_field_for_term] AND/OR other_terms[other_fields]",
+      "max_results" : maximum sequence calls for this query you want to include in db,
+      "label" : "whatever you want to name this query for progress tracking"
+    }, ...
+    ]
+
+Then call fetch_mixed_database with the following arguments:
+    queries : the list above
+    dbType : "nucleotide" or "protein"
+    output_filename : "example.fasta" or None if you don't want to save to a file
+
+To run BLAST+ (command-based NCBI BLAST) on custome db, call blast_validation with the following arguments and view output in terminal:
+    queryFile: a .fasta or .fna file
+    dbFile: a .fasta file
+    segment_id: for queryFile containing multiple sequences, give the string following and ">" entry up until the first space 
+                (e.g., ">NC_002023.1 Influenza A virus (A/Puerto Rico/8/1934(H1N1)) segment 1, complete sequence" becomes "NC.002023.1")
+    dbType: "nucl" or "prot"
+
+"""
 
 Entrez.email = "mmccrear@andrew.cmu.edu"
 
@@ -34,11 +59,12 @@ def fetch_mixed_database(queries, dbType, output_filename):
     print(all_records[0].format("fasta"))
 
     # Save combined database:
-    #SeqIO.write(all_records, output_filename, "fasta")
-    with open(output_filename, "w") as f:
-        for record in all_records:
-            f.write(record.format("fasta"))
-    #print(f"\nSaved {len(all_records)} total sequences to {output_filename}")
+    if output_filename != None:
+        #SeqIO.write(all_records, output_filename, "fasta")
+        #print(f"\nSaved {len(all_records)} total sequences to {output_filename}")
+        with open(output_filename, "w") as f:
+            for record in all_records:
+                f.write(record.format("fasta"))
 
     # Print composition summary
     labels = {}
