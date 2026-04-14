@@ -51,12 +51,6 @@ def fetch_mixed_database(queries, dbType, output_filename):
         
         all_records.extend(records)
         print(f"  Added {len(records)} sequences")
-    
-    for x in range(0, len(all_records), 50):
-        print(all_records[x].id)
-        print(all_records[x].seq)
-    
-    print(all_records[0].format("fasta"))
 
     # Save combined database:
     if output_filename != None:
