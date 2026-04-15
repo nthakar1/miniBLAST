@@ -81,7 +81,10 @@ if st.button("Run miniBLAST", disabled=(query is None)):
         ref_id = db[i].id
         status.text(f"Aligning to reference {i} ({ref_id})")
 
-        alignment = miniBLASTn(ref, query, s1=int(s1), A=int(A))
+        if "dna" in selected_db.lower():
+            alignment = miniBLASTn(ref, query, s1=int(s1), A=int(A))
+        if "protein" in selected_db.lower():
+            alignment = miniBLASTp(ref, query, s1=int(s1), A=int(A))
 
         if alignment:
             alignment["bit_score"] = round(calculate_bit_score(alignment["score"], BLASTN_PARAMS), 4)
