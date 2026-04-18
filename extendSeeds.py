@@ -1,3 +1,4 @@
+import math
 from Bio.Align import substitution_matrices
 BLOSUM62 = substitution_matrices.load("BLOSUM62")
 
@@ -39,9 +40,19 @@ def extendFromSeeds(ref, query, seeds, k, s1, matrix, match, mismatch, gapOpen, 
             ungapped_hits.append(ungapped)
 
     #print(f"UNGAPPED HITS: {ungapped_hits}")
+    print(f"{len(ungapped_hits)} ungapped seeds passed to gapped extension")
 
     if not ungapped_hits:
         return None
+    
+    ungapped_hits.sort(key=lambda x: x["score"], reverse=True)
+    total_hits = len(ungapped_hits)
+    n_keep = max(1, math.ceil(0.03 * total_hits))
+    ungapped_hits = ungapped_hits[:n_keep]
+        
+    # CHANGED: Sort and keep only the top 3 ungapped hits
+    # ungapped_hits.sort(key=lambda x: x["score"], reverse=True)
+    # ungapped_hits = ungapped_hits[:3]
     
     best_alignment = None
     best_score = float("-inf")

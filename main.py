@@ -137,7 +137,7 @@ def main():
     print(f"Found {len(segments)} sequence segments in query file")
     
     # could consider computing once and storing--time vs memory
-    db_h1n1 = fetch_mixed_database(queriesViral, "h1n1_mixed_database.fasta")
+    db_h1n1 = fetch_mixed_database(queriesViral, "nucleotide", "h1n1_mixed_database.fasta")
 
     sum(i**2 for i in range(1000000))
     endTime = time.perf_counter()
