@@ -10,20 +10,16 @@ from Bio import SeqIO
 
 from main import miniBLASTn
 from datatypes import BLASTN_PARAMS
-from statistics import calculate_bit_score, calculate_e_value
+from blastStats import calculate_bit_score, calculate_e_value, compute_s1_threshold
 
 
-# -----------------------------
 # PAGE SETUP
-# -----------------------------
 st.set_page_config(page_title="miniBLAST", layout="wide")
 st.title("miniBLAST")
 st.write("Local alignment of nucleotide sequences against a FASTA database.")
 
 
-# -----------------------------
 # SESSION STATE
-# -----------------------------
 if "results_df" not in st.session_state:
     st.session_state.results_df = None
 
@@ -31,17 +27,8 @@ if "run_metadata" not in st.session_state:
     st.session_state.run_metadata = None
 
 
-# -----------------------------
 # SIDEBAR PARAMETERS
-# -----------------------------
 st.sidebar.header("Parameters")
-
-s1 = st.sidebar.number_input(
-    "Ungapped extension threshold (s1)",
-    value=20,
-    min_value=1,
-    help="Minimum ungapped extension score needed to proceed to gapped alignment. Default = 20."
-)
 
 A = st.sidebar.number_input(
     "Two-hit diagonal window (A)",
@@ -198,7 +185,10 @@ def render_alignment_viewer(hit_row: pd.Series):
 
     window = st.slider("Zoom window size", min_value=40, max_value=300, value=120, step=10)
     max_start = max(0, len(aligned_query) - window)
-    start = st.slider("Alignment start", min_value=0, max_value=max_start, value=0, step=1)
+    if max_start > 0:
+        start = st.slider("Alignment start", min_value=0, max_value=max_start, value=0, step=1)
+    else:
+        start = 0
 
     render_alignment_window(aligned_query, aligned_ref, start=start, window=window)
 
@@ -260,6 +250,9 @@ if st.button("Run miniBLAST", disabled=(query is None)):
         db = list(SeqIO.parse(selected_db, "fasta"))
     st.success(f"Database loaded: {len(db)} sequences")
 
+    effective_s1 = round(compute_s1_threshold(query, db, BLASTN_PARAMS), 2)
+    st.info(f"s1 threshold (auto-computed): {effective_s1}")
+
     references = list(range(0, len(db), int(step)))
     results = []
 
@@ -273,7 +266,7 @@ if st.button("Run miniBLAST", disabled=(query is None)):
         ref_id = db[i].id
 
         status.text(f"Aligning to reference {i} ({ref_id})")
-        alignment = miniBLASTn(ref, query, s1=int(s1), A=int(A))
+        alignment = miniBLASTn(ref, query, s1=effective_s1, A=int(A))
 
         if alignment:
             raw_score = alignment["score"]
@@ -310,7 +303,7 @@ if st.button("Run miniBLAST", disabled=(query is None)):
             "db_name": selected_db,
             "query_length": len(query),
             "num_results": len(results),
-            "s1": int(s1),
+            "s1": effective_s1,
             "A": int(A),
             "step": int(step),
         }
@@ -348,7 +341,7 @@ if st.session_state.results_df is not None:
             "pct_identity",
             "position"
         ]],
-        use_container_width=True,
+        width="stretch",
         hide_index=True
     )
 

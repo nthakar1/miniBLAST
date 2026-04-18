@@ -3,7 +3,7 @@ from extendSeeds import extendFromSeeds
 from twoHit import TwoHitSeeds
 from datatypes import BLASTN_PARAMS, BLASTP_PARAMS, BlastConfig, BLOSUM
 from database import fetch_mixed_database
-from statistics import calculate_bit_score, calculate_e_value
+from blastStats import calculate_bit_score, calculate_e_value
 
 from Bio import SeqIO
 import csv
