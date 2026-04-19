@@ -45,7 +45,10 @@ def miniBLASTn(ref, query, s1, A):
     threshHSSP = matchReward*(k-seedMismatchAllowed) - mismatchPen*(seedMismatchAllowed)
 
     startTime = time.perf_counter()
-    singleSeeds = BestSeeds(ref, query, k, matchReward, mismatchPen, matrix, threshHSSP)
+    singleSeeds, masking_info = BestSeedsWithMasking(
+        ref=ref, query=query, k=k, matchScore=matchReward, mismatchPen=mismatchPen, matrix=None, threshHSSP=threshHSSP,
+        apply_masking=True, dust_complexity_threshold=20
+    )
     
     sum(i**2 for i in range(1000000))
     endTime = time.perf_counter()
