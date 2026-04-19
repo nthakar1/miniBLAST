@@ -30,6 +30,15 @@ if "run_metadata" not in st.session_state:
 # SIDEBAR PARAMETERS
 st.sidebar.header("Parameters")
 
+seq_type = st.sidebar.radio(
+    "Sequence type",
+    ["Nucleotide (DNA)", "Protein"],
+    help="Choose DNA to use BLASTN parameters; choose Protein to use BLASTP/BLOSUM62 parameters."
+)
+is_protein = seq_type == "Protein"
+blast_params = BLASTP_PARAMS if is_protein else BLASTN_PARAMS
+blast_fn     = miniBLASTp    if is_protein else miniBLASTn
+
 A = st.sidebar.number_input(
     "Two-hit diagonal window (A)",
     value=40,
@@ -143,6 +152,12 @@ def render_alignment_window(aligned_query: str, aligned_ref: str, start: int = 0
 
     ruler_numbers = "".join(str((start + i + 1) % 10) for i in range(end - start))
 
+    # Use a fixed-width CSS label so every row's content starts at the same
+    # horizontal offset.  Plain HTML collapses multiple spaces inside <b> tags,
+    # which shifts the Ref / match rows relative to Query / Ruler – this avoids
+    # that by giving each label an explicit inline-block width.
+    lbl = "display:inline-block;width:7ch;font-weight:bold;flex-shrink:0;"
+
     html_block = f"""
     <div style="
         font-family:Menlo,Consolas,monospace;
@@ -155,11 +170,11 @@ def render_alignment_window(aligned_query: str, aligned_ref: str, start: int = 0
         overflow-x:auto;
         white-space:nowrap;
     ">
-      <div><b>Pos</b>   {start + 1} - {end}</div>
-      <div><b>Ruler</b> {ruler_numbers}</div>
-      <div><b>Query</b> {''.join(q_html)}</div>
-      <div><b>      </b> {''.join(mid_html)}</div>
-      <div><b>Ref  </b> {''.join(r_html)}</div>
+      <div><span style="{lbl}">Pos</span>{start + 1}&nbsp;&ndash;&nbsp;{end}</div>
+      <div><span style="{lbl}">Ruler</span>{ruler_numbers}</div>
+      <div><span style="{lbl}">Query</span>{''.join(q_html)}</div>
+      <div><span style="{lbl}">&nbsp;</span>{''.join(mid_html)}</div>
+      <div><span style="{lbl}">Ref</span>{''.join(r_html)}</div>
     </div>
     """
     st.markdown(html_block, unsafe_allow_html=True)
@@ -250,12 +265,8 @@ if st.button("Run miniBLAST", disabled=(query is None)):
         db = list(SeqIO.parse(selected_db, "fasta"))
     st.success(f"Database loaded: {len(db)} sequences")
 
-    if "dna" in selected_db.lower():
-        effective_s1 = round(compute_s1_threshold(query, db, BLASTN_PARAMS), 2)
-    if "protein" in selected_db.lower():
-        effective_s1 = round(compute_s1_threshold(query, db, BLASTP_PARAMS), 2)
-    
-    st.info(f"s1 threshold (auto-computed): {effective_s1}")
+    effective_s1 = round(compute_s1_threshold(query, db, blast_params), 2)
+    st.info(f"s1 threshold (auto-computed): {effective_s1}  |  Mode: {seq_type}")
 
     references = list(range(0, len(db), int(step)))
     results = []
@@ -270,16 +281,13 @@ if st.button("Run miniBLAST", disabled=(query is None)):
         ref_id = db[i].id
 
         status.text(f"Aligning to reference {i} ({ref_id})")
-        
-        if "dna" in selected_db.lower():
-            alignment = miniBLASTn(ref, query, s1=effective_s1, A=int(A))
-        if "protein" in selected_db.lower():
-            alignment = miniBLASTp(ref, query, s1=effective_s1, A=int(A))
+
+        alignment = blast_fn(ref, query, s1=effective_s1, A=int(A))
 
         if alignment:
             raw_score = alignment["score"]
-            bit_score = round(calculate_bit_score(raw_score, BLASTN_PARAMS), 4)
-            e_value = float(f"{calculate_e_value(raw_score, len(query), len(db), BLASTN_PARAMS):.2e}")
+            bit_score = round(calculate_bit_score(raw_score, blast_params), 4)
+            e_value = float(f"{calculate_e_value(raw_score, len(query), len(db), blast_params):.2e}")
 
             results.append({
                 "ref_index": i,
@@ -371,3 +379,4 @@ if st.session_state.results_df is not None:
         "blast_results.csv",
         "text/csv"
     )
+    
