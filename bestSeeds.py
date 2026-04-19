@@ -58,7 +58,7 @@ def KmerNumericalEncoding(kmer, matrix):
     res = 0
     for pos in range(k):
         char = kmer[pos]
-        # skip if not in encodingDict (like for N, other ambigious nucleotides)
+        # skip if not in encodingDict (ambigious nucleotides, residues)
         if char not in encodingDict:
             return None
         val = encodingDict[char]
@@ -118,6 +118,8 @@ def ExpandCandidates(candidates, scores, qKmer, matrix, matchScore, mismatchPen)
                     new_candidate = candidate + char
                     new_score = scores[i] + scorePair(char, qKmer[j], matrix, matchScore, mismatchPen)
                     new_candidates.append(new_candidate)
+                    new_scores.append(new_score)
+
     
     return new_candidates, new_scores
 

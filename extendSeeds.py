@@ -360,11 +360,15 @@ def scorePair(a, b, matrix=None, match=None, mismatch=None):
     """
 
     if matrix is not None:
+        # naive way to handle ambiguous residues
+        if a not in matrix or b not in matrix:
+            return 0
         return matrix[a][b]
     else:
         if a == b:
             return match
         else:
+            # naive way to handle ambiguous nucleotide symbols
             return -mismatch
         
 def computeKmerCoverage(query, seeds, k):

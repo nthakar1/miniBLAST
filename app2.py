@@ -8,8 +8,8 @@ import html
 
 from Bio import SeqIO
 
-from main import miniBLASTn
-from datatypes import BLASTN_PARAMS
+from main2 import miniBLASTn, miniBLASTp
+from datatypes import BLASTN_PARAMS, BLASTP_PARAMS
 from blastStats import calculate_bit_score, calculate_e_value, compute_s1_threshold
 
 
@@ -250,7 +250,11 @@ if st.button("Run miniBLAST", disabled=(query is None)):
         db = list(SeqIO.parse(selected_db, "fasta"))
     st.success(f"Database loaded: {len(db)} sequences")
 
-    effective_s1 = round(compute_s1_threshold(query, db, BLASTN_PARAMS), 2)
+    if "dna" in selected_db.lower():
+        effective_s1 = round(compute_s1_threshold(query, db, BLASTN_PARAMS), 2)
+    if "protein" in selected_db.lower():
+        effective_s1 = round(compute_s1_threshold(query, db, BLASTP_PARAMS), 2)
+    
     st.info(f"s1 threshold (auto-computed): {effective_s1}")
 
     references = list(range(0, len(db), int(step)))
@@ -266,7 +270,11 @@ if st.button("Run miniBLAST", disabled=(query is None)):
         ref_id = db[i].id
 
         status.text(f"Aligning to reference {i} ({ref_id})")
-        alignment = miniBLASTn(ref, query, s1=effective_s1, A=int(A))
+        
+        if "dna" in selected_db.lower():
+            alignment = miniBLASTn(ref, query, s1=effective_s1, A=int(A))
+        if "protein" in selected_db.lower():
+            alignment = miniBLASTp(ref, query, s1=effective_s1, A=int(A))
 
         if alignment:
             raw_score = alignment["score"]
