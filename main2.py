@@ -1,4 +1,4 @@
-from bestSeeds import BestSeeds
+from bestSeeds import BestSeedsWithMasking
 from extendSeeds import extendFromSeeds
 from TwoHit import TwoHitSeeds
 from datatypes import BLASTN_PARAMS, BLASTP_PARAMS, BlastConfig, BLOSUM
@@ -119,7 +119,7 @@ def miniBLASTp(ref, query, s1, A):
     threshT=BLASTP_PARAMS.threshold_T
 
     startTime = time.perf_counter()
-    singleSeeds = BestSeeds(ref, query, k, matchReward, mismatchPen, matrix, threshT)
+    singleSeeds = BestSeedsWithMasking(ref, query, k, matchReward, mismatchPen, matrix, threshT)
     
     sum(i**2 for i in range(1000000))
     endTime = time.perf_counter()
@@ -209,9 +209,6 @@ def main():
     # for test: only aligning to 10 of the roughly 1000 sequences in the database
     startTime = time.perf_counter()
     
-    # NOTE: Since your new queries list only pulls ~90 total sequences, a step 
-    # of 100 here means it will only run on the first sequence (i=0). 
-    # If you want it to test more, change the 100 to a 10 or a 1!
     for i in range(0, len(db_h1n1), 10):
         print()
         print(f"Aligning to reference {i}")
