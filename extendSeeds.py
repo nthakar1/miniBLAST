@@ -45,15 +45,6 @@ def extendFromSeeds(ref, query, seeds, k, s1, matrix, match, mismatch, gapOpen, 
     if not ungapped_hits:
         return None
     
-    ungapped_hits.sort(key=lambda x: x["score"], reverse=True)
-    total_hits = len(ungapped_hits)
-    n_keep = max(1, math.ceil(0.03 * total_hits))
-    ungapped_hits = ungapped_hits[:n_keep]
-        
-    # CHANGED: Sort and keep only the top 3 ungapped hits
-    # ungapped_hits.sort(key=lambda x: x["score"], reverse=True)
-    # ungapped_hits = ungapped_hits[:3]
-    
     best_alignment = None
     best_score = float("-inf")
 
