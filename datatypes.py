@@ -23,6 +23,15 @@ BLOSUM['W'] = {'A': -3, 'C': -2, 'D': -4, 'E': -3, 'F': 1, 'G': -2, 'H': -2, 'I'
 BLOSUM['Y'] = {'A': -2, 'C': -2, 'D': -3, 'E': -2, 'F': 3, 'G': -3, 'H': 2, 'I': -1, 'K': -2, 'L': -1, 'M': -1, 'N': -2, 'P': -3, 'Q': -1, 'R': -2, 'S': -2, 'T': -2, 'V': -1, 'W': 2, 'Y': 7}
 
 
+# add scoring presets with lambda and K values specific to each scoring system
+scoring_presets= dict()
+scoring_presets["1,-2"]= {"match_reward":1, "mismatch_penalty":2, "gap_opening": 2, "gap_extension":2, "lambda_val":1.33,"K":0.62}
+scoring_presets["1,-3"]={"match_reward":1, "mismatch_penalty":3, "gap_opening": 2, "gap_extension":2, "lambda_val":1.37,"K":0.70}
+scoring_presets["1,-4"]={"match_reward":1, "mismatch_penalty":4, "gap_opening": 1, "gap_extension":2, "lambda_val":1.36,"K":0.67}
+scoring_presets["2,-3"]={"match_reward":2, "mismatch_penalty":3, "gap_opening": 5, "gap_extension":2, "lambda_val":0.625,"K":0.41}
+scoring_presets["4,-5"]={"match_reward":4, "mismatch_penalty":5, "gap_opening": 6, "gap_extension":5, "lambda_val":0.28,"K":0.21}
+scoring_presets["1,-1"]={"match_reward":1, "mismatch_penalty":1, "gap_opening": 3, "gap_extension":2, "lambda_val":1.09,"K":0.31}
+
 # using dataclass for easier formatting of classes and objects
 @dataclass
 # all parameter information found via https://www.ncbi.nlm.nih.gov/books/NBK279684/ see table C2 and C3
