@@ -85,7 +85,7 @@ def miniBLASTn(ref, query, s1, A):
 
     return bestLocalAlignment
 
-def miniBLASTp(ref, query, s1, A):
+def miniBLASTp(ref, query, s1, A, threshT):
     """
     Full miniBLAST pipeline:
       1. Seed generation  (BestSeeds)
