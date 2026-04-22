@@ -1,3 +1,4 @@
+import math
 from Bio.Align import substitution_matrices
 BLOSUM62 = substitution_matrices.load("BLOSUM62")
 
@@ -39,6 +40,7 @@ def extendFromSeeds(ref, query, seeds, k, s1, matrix, match, mismatch, gapOpen, 
             ungapped_hits.append(ungapped)
 
     #print(f"UNGAPPED HITS: {ungapped_hits}")
+    print(f"{len(ungapped_hits)} ungapped seeds passed to gapped extension")
 
     if not ungapped_hits:
         return None
@@ -359,6 +361,7 @@ def scorePair(a, b, matrix=None, match=None, mismatch=None):
         if a == b:
             return match
         else:
+            # naive way to handle ambiguous nucleotide symbols
             return -mismatch
         
 def computeKmerCoverage(query, seeds, k):
