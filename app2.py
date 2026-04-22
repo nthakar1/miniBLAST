@@ -1,5 +1,9 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
+import matplotlib
 import time
 import glob
 import os
@@ -12,13 +16,11 @@ from main2 import miniBLASTn, miniBLASTp
 from datatypes import BLASTN_PARAMS, BLASTP_PARAMS, scoring_presets
 from blastStats import calculate_bit_score, calculate_e_value, compute_s1_threshold
 
-# Initialize Session State
-if "results_df" not in st.session_state:
-    st.session_state.results_df = None
+# Initialize Session State per Tab
 
-if "run_metadata" not in st.session_state:
-    st.session_state.run_metadata = None
-
+for key in ("results_df_n", "run_metadata_n", "results_df_p", "run_metadata_p"):
+    if key not in st.session_state:
+        st.session_state[key] = None
 # -----------------------------
 # ALIGNMENT VIEWER HELPERS
 # -----------------------------
@@ -172,6 +174,121 @@ def render_alignment_viewer(hit_row: pd.Series, key_prefix=""):
 
     render_alignment_window(aligned_query, aligned_ref, start=start, window=window)
 
+# Create a color-coded results table with good results indicated in light green
+def render_styled_results(df: pd.DataFrame):
+    display_cols = ["ref_index", "ref_id", "score", "bit_score",
+                    "e_value", "query_coverage", "pct_identity", "position"]
+    view = df[display_cols].copy()
+
+    styled = (
+        view.style
+        # setting vmax=200 forces the color to stay in the light-green range at 100%
+        .background_gradient(subset=["pct_identity"],   cmap="YlGn", vmin=0, vmax=200)
+        .background_gradient(subset=["query_coverage"], cmap="YlGn", vmin=0, vmax=200)
+        .background_gradient(subset=["bit_score"],      cmap="YlGn")
+        # setting vmin=-1.0 forces E-value 0 to be a readable light green
+        .background_gradient(subset=["e_value"],        cmap="YlGn_r", vmin=-1.0, vmax=1.0)
+        .format({
+            "e_value":        "{:.2e}", # Results in 3 sig figs (e.g., 1.23e-05)
+            "bit_score":      "{:.2f}",
+            "score":          "{:.2f}",
+            "pct_identity":   "{:.1f}",
+            "query_coverage": "{:.1f}",
+        })
+    )
+    st.dataframe(styled, width="stretch", hide_index=True)
+
+
+# Create a  scatter plot where x=axis= bit_score, y-axis=-log(E-val), the size of each point=query_cov, and the color of each point= pct_identity, tooltip tells users the reference and all the results
+def render_score_scatter(df: pd.DataFrame):
+    plot = df.copy()
+    # scale e-val by log 10 
+    plot["neg_log_e"] = -np.log10(plot["e_value"].clip(lower=1e-300))
+
+    fig = px.scatter(
+        plot,
+        x="bit_score",
+        y="neg_log_e",
+        size="query_coverage",
+        color="pct_identity",
+        hover_data={
+            "ref_id": True,
+            "bit_score": ":.2f",
+            "e_value": ":.2e",
+            "pct_identity": ":.1f",
+            "query_coverage": ":.1f",
+            "neg_log_e": False,        # hide the helper column from hover
+        },
+        # Explicitly setting a light color range for readability
+        color_continuous_scale=["#ffffcc", "#90ee90"],
+        range_color=(0, 100),
+        size_max=10,
+        opacity=0.7,
+        labels={
+            "bit_score":    "Bit score",
+            "neg_log_e":    "-log₁₀(E-value)",
+            "pct_identity": "% identity",
+        },
+        title="Alignment quality overview",
+    )
+    fig.update_layout(height=500, margin=dict(l=40, r=40, t=50, b=40))
+    st.plotly_chart(fig, use_container_width=True)
+
+
+# create a summary that shows where the local alignment occurred between each reference and the query sequence
+def render_graphical_summary(df: pd.DataFrame, query_length: int, top_n: int = 25):
+    top = df.head(top_n).copy()
+
+    # derive query_start / query_end from existing columns
+    top["query_end"]   = top["position"].apply(lambda p: p[0])
+    top["span"]        = top["aligned_query"].apply(lambda s: len(s) - s.count("-"))
+    top["query_start"] = top["query_end"] - top["span"] + 1
+    top["length"]      = top["query_end"] - top["query_start"]
+
+    def bucket_color(b):
+        if b < 40:   return "#000000"
+        if b < 50:   return "#1e88e5"
+        if b < 80:   return "#4caf50"
+        if b < 200:  return "#e91e63"
+        return "#d32f2f"
+    top["color"] = top["bit_score"].apply(bucket_color)
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=top["length"],
+        base=top["query_start"],
+        y=top["ref_id"],
+        orientation="h",
+        marker_color=top["color"],
+        hovertemplate=(
+            "<b>%{y}</b><br>"
+            "Query positions: %{base} – %{customdata[0]}<br>"
+            "Bit score: %{customdata[1]:.1f}<br>"
+            "E-value: %{customdata[2]:.2e}<br>"
+            "% identity: %{customdata[3]:.1f}<extra></extra>"
+        ),
+        customdata=top[["query_end", "bit_score", "e_value", "pct_identity"]].values,
+    ))
+    fig.update_layout(
+        title="Graphical summary (NCBI-style)",
+        xaxis=dict(title=f"Position on query (1 – {query_length})",
+                   range=[0, query_length]),
+        yaxis=dict(title="Reference", autorange="reversed"),
+        height=max(300, 25 * len(top)),
+        margin=dict(l=40, r=40, t=50, b=40),
+        showlegend=False,
+    )
+    st.plotly_chart(fig, use_container_width=True)
+    st.caption(
+        "Bit score bins: "
+        "<span style='color:#d32f2f'>■ ≥200</span> &nbsp; "
+        "<span style='color:#e91e63'>■ 80–200</span> &nbsp; "
+        "<span style='color:#4caf50'>■ 50–80</span> &nbsp; "
+        "<span style='color:#1e88e5'>■ 40–50</span> &nbsp; "
+        "<span style='color:#000000'>■ &lt;40</span>",
+        unsafe_allow_html=True,
+    )
+
 # PAGE SETUP
 
 tab1, tab2 = st.tabs(["miniBLASTn", "miniBLASTp"])
@@ -210,6 +327,24 @@ with tab1:
         key="n_A"
     )
 
+    xdropungap= st.number_input(
+        "X drop for ungapped alignments",
+            value = 20,
+            key="n_Xu"
+    )
+
+    xdrop_gap= st.number_input(
+        "X drop for gapped alignments",
+        value=30,
+        key="n_Xg"
+    )
+
+    xdrop_gap_final= st.number_input(
+        "Final X drop",
+        value=100,
+        key="n_Xf"
+    )
+
     step = st.number_input(
         "Sample every Nth reference",
         value=1,
@@ -220,7 +355,7 @@ with tab1:
 
     # set the other parameters associated with the specific match reward and mismatch penalty the user chose
     selected_preset= scoring_presets[scoring_parameters]
-    run_params=dataclasses.replace(BLASTN_PARAMS,**selected_preset)
+    run_params=dataclasses.replace(BLASTN_PARAMS,xdrop_ungap=xdropungap,xdrop_gap=xdrop_gap,xdrop_gap_final=xdrop_gap_final,**selected_preset)
 
     # -----------------------------
     # QUERY INPUT
@@ -260,7 +395,7 @@ with tab1:
     # -----------------------------
     st.header("Database")
     db_files = [
-        f for f in glob.glob("*.fasta") + glob.glob("*.fna")
+        f for f in glob.glob("*.fasta") + glob.glob("*.fna") 
         if "database" in f.lower()
     ]
 
@@ -281,7 +416,7 @@ with tab1:
         st.success(f"Database loaded: {len(db)} sequences")
 
         effective_s1 = round(compute_s1_threshold(query, db, run_params, e_threshold), 2)
-        st.info(f"s1 threshold (auto-computed): {effective_s1}  |  Mode: {"blastn"}")
+        st.info(f"s1 threshold (auto-computed): {effective_s1}  |  Mode: blastn")
 
         references = list(range(0, len(db), int(step)))
         results = []
@@ -297,7 +432,7 @@ with tab1:
 
             status.text(f"Aligning to reference {i} ({ref_id})")
 
-            alignment = miniBLASTn(ref, query, s1=effective_s1, A=int(A))
+            alignment = miniBLASTn(ref, query, s1=effective_s1, A=int(A), params=run_params)
 
             if alignment:
                 raw_score = alignment["score"]
@@ -328,8 +463,8 @@ with tab1:
             df = pd.DataFrame(results)
             df = df.sort_values(by=["e_value", "bit_score", "score"], ascending=[True, False, False]).reset_index(drop=True)
 
-            st.session_state.results_df = df
-            st.session_state.run_metadata = {
+            st.session_state.results_df_n = df
+            st.session_state.run_metadata_n = {
                 "elapsed": elapsed,
                 "db_name": selected_db,
                 "query_length": len(query),
@@ -347,9 +482,10 @@ with tab1:
     # -----------------------------
     # DISPLAY SAVED RESULTS
     # -----------------------------
-    if st.session_state.results_df is not None:
-        df = st.session_state.results_df
-        meta = st.session_state.run_metadata
+    if st.session_state.results_df_n is not None:
+        df = st.session_state.results_df_n
+        meta = st.session_state.run_metadata_n
+        key_prefix="n"
 
         if meta is not None:
             st.success(
@@ -361,20 +497,41 @@ with tab1:
             )
 
         st.header("Results")
-        st.dataframe(
-            df[[
-                "ref_index",
-                "ref_id",
-                "score",
-                "bit_score",
-                "e_value",
-                "query_coverage",
-                "pct_identity",
-                "position"
-            ]],
-            width="stretch",
-            hide_index=True
-        )
+
+        # --- RESULTS PAGE NAVIGATION ---
+        num_total = len(df)
+        if num_total > 20:
+            st.write(f"Showing a subset of {num_total} total hits.")
+            # Create chunks of 20 for the slider
+            step_size = 20
+
+            # Create a dictionary mapping labels to their numeric ranges
+            # This prevents Streamlit from confusing tuples for range-slider handles
+            range_map = {
+                f"Hits {i+1} to {min(i + step_size, num_total)}": (i, min(i + step_size, num_total))
+                for i in range(0, num_total, step_size)
+            }
+            options = list(range_map.keys())
+            
+            selection = st.select_slider(
+                "Select hit range to visualize in the graph:",
+                options=options,
+                value=options[0],
+                format_func=lambda x: f"Hits {x[0]+1} to {x[1]}",
+                key=f"{key_prefix}_nav_slider_{num_total}"
+            )
+            
+            # Filter the dataframe for the charts
+            bounds = range_map[selection]
+            df_subset = df.iloc[bounds[0]:bounds[1]]
+        else:
+            df_subset = df
+
+
+        render_graphical_summary(df_subset, meta["query_length"])   # the iconic one — show first
+        render_styled_results(df_subset)                             # colored table
+        with st.expander("Local Sequence Alignment Scores"):
+            render_score_scatter(df_subset)                          # hide behind expander
 
         best = df.iloc[0]
         st.subheader(f"Top hit: {best['ref_id']} (E-value: {best['e_value']})")
@@ -388,7 +545,7 @@ with tab1:
         chosen_row = df[df["ref_id"] == chosen_ref].iloc[0]
         render_alignment_viewer(chosen_row, key_prefix="n")
 
-        csv = df.drop(columns=["aligned_query", "aligned_ref"]).to_csv(index=False)
+        csv = df.drop(columns=["aligned_query", "aligned_ref"]).to_csv(index=False, float_format="%.2e")
         st.download_button(
             "Download results CSV",
             csv,
@@ -397,8 +554,6 @@ with tab1:
             key="n_csv"
         )
     
-
-    
 with tab2:
     st.title("miniBLASTp")
     st.write("Local alignment of protein query sequence(s) against a database of protein sequences.")
@@ -406,7 +561,7 @@ with tab2:
     # because sidebars exist globally, VS is removing sidebar method to ensure that each parameter specific to DNA or proteins stays in that tab
     k= st.number_input(
         "Word length",
-        value=7,
+        value=3,
         min_value=1,
         help="Initial seed length prior to extension",
         key="p_k"
@@ -442,8 +597,25 @@ with tab2:
         key="p_step"
     )
 
+    xdropungap= st.number_input(
+        "X drop for ungapped protein sequence alignments",
+            value = 7,
+            key="p_Xu"
+    )
+    xdrop_gap= st.number_input(
+        "X drop for gapped protein sequence alignments",
+        value=15,
+        key="p_Xg"
+    )
+
+    xdrop_gap_final= st.number_input(
+        "Final X drop",
+        value=25,
+        key="p_Xf"
+    )
+
     # set the BLASTP T value based on user input
-    run_params=dataclasses.replace(BLASTP_PARAMS,threshold_T=threshold_T)
+    run_params=dataclasses.replace(BLASTP_PARAMS,xdrop_ungap=xdropungap,xdrop_gap=xdrop_gap,xdrop_gap_final=xdrop_gap_final,threshold_T=threshold_T)
 
     # -----------------------------
     # QUERY INPUT
@@ -503,8 +675,8 @@ with tab2:
             db = list(SeqIO.parse(selected_db, "fasta"))
         st.success(f"Database loaded: {len(db)} sequences")
 
-        effective_s1 = round(compute_s1_threshold(query, db, run_params), 2)
-        st.info(f"s1 threshold (auto-computed): {effective_s1}  |  Mode: {"blastp"}")
+        effective_s1 = round(compute_s1_threshold(query, db, run_params,e_threshold), 2)
+        st.info(f"s1 threshold (auto-computed): {effective_s1}  |  Mode: blastp")
 
         references = list(range(0, len(db), int(step)))
         results = []
@@ -520,7 +692,7 @@ with tab2:
 
             status.text(f"Aligning to reference {i} ({ref_id})")
 
-            alignment = miniBLASTp(ref, query, s1=effective_s1, A=int(A),threshT=threshold_T)
+            alignment = miniBLASTp(ref, query, s1=effective_s1, A=int(A),threshT=threshold_T, params=run_params)
 
             if alignment:
                 raw_score = alignment["score"]
@@ -551,8 +723,8 @@ with tab2:
             df = pd.DataFrame(results)
             df = df.sort_values(by=["e_value", "bit_score", "score"], ascending=[True, False, False]).reset_index(drop=True)
 
-            st.session_state.results_df = df
-            st.session_state.run_metadata = {
+            st.session_state.results_df_p = df
+            st.session_state.run_metadata_p = {
                 "elapsed": elapsed,
                 "db_name": selected_db,
                 "query_length": len(query),
@@ -562,17 +734,18 @@ with tab2:
                 "step": int(step),
             }
         else:
-            st.session_state.results_df = None
-            st.session_state.run_metadata = None
+            st.session_state.results_df_p = None
+            st.session_state.run_metadata_p = None
             st.warning("No alignments passed the threshold.")
 
 
     # -----------------------------
     # DISPLAY SAVED RESULTS
     # -----------------------------
-    if st.session_state.results_df is not None:
-        df = st.session_state.results_df
-        meta = st.session_state.run_metadata
+    if st.session_state.results_df_p is not None:
+        df = st.session_state.results_df_p
+        meta = st.session_state.run_metadata_p
+        key_prefix="p"
 
         if meta is not None:
             st.success(
@@ -584,20 +757,37 @@ with tab2:
             )
 
         st.header("Results")
-        st.dataframe(
-            df[[
-                "ref_index",
-                "ref_id",
-                "score",
-                "bit_score",
-                "e_value",
-                "query_coverage",
-                "pct_identity",
-                "position"
-            ]],
-            width="stretch",
-            hide_index=True
-        )
+       
+        # --- RESULTS PAGE NAVIGATION ---
+        num_total = len(df)
+        if num_total > 20:
+            st.write(f"Showing a subset of {num_total} total hits.")
+            # Create chunks of 20 for the slider
+            step_size = 20
+            range_map = {
+                f"Hits {i+1} to {min(i + step_size, num_total)}": (i, min(i + step_size, num_total))
+                for i in range(0, num_total, step_size)
+            }
+            options = list(range_map.keys())
+            
+            selection = st.select_slider(
+                "Select hit range to visualize in the graph:",
+                options=options,
+                value=options[0],
+                key=f"{key_prefix}_nav_slider_{num_total}"
+            )
+            
+            # Filter the dataframe for the charts
+            bounds= range_map[selection]
+            df_subset = df.iloc[bounds[0]:bounds[1]]
+        else:
+            df_subset = df
+
+
+        render_graphical_summary(df_subset, meta["query_length"])   # the iconic one — show first
+        render_styled_results(df_subset)                             # colored table
+        with st.expander("Local Sequence Alignment Scores"):
+            render_score_scatter(df_subset)                          # hide behind expander
 
         best = df.iloc[0]
         st.subheader(f"Top hit: {best['ref_id']} (E-value: {best['e_value']})")
@@ -611,11 +801,11 @@ with tab2:
         chosen_row = df[df["ref_id"] == chosen_ref].iloc[0]
         render_alignment_viewer(chosen_row, key_prefix="p")
 
-        csv = df.drop(columns=["aligned_query", "aligned_ref"]).to_csv(index=False)
+        csv = df.drop(columns=["aligned_query", "aligned_ref"]).to_csv(index=False, float_format="%.2e")
         st.download_button(
             "Download results CSV",
             csv,
             "blast_results.csv",
             "text/csv",
-            key="p_csv"
+            key="p_csv",
         )

@@ -216,6 +216,7 @@ def ExpandCandidates(candidates, scores, qKmer, matrix, matchScore, mismatchPen)
                     new_candidate = candidate + char
                     new_score = scores[i] + scorePair(char, qKmer[j], matrix, matchScore, mismatchPen)
                     new_candidates.append(new_candidate)
+                    new_scores.append(new_score)
     
     return new_candidates, new_scores
 

@@ -1,4 +1,4 @@
-from bestSeeds import BestSeedsWithMasking
+from bestSeeds import BestSeedsWithMasking, BestSeeds
 from extendSeeds import extendFromSeeds
 from TwoHit import TwoHitSeeds
 from datatypes import BLASTN_PARAMS, BLASTP_PARAMS, BlastConfig, BLOSUM
@@ -9,7 +9,7 @@ from Bio import SeqIO
 import csv
 import time
 
-def miniBLASTn(ref, query, s1, A):
+def miniBLASTn(ref, query, s1, A, params=BLASTN_PARAMS):
     """
     Full miniBLAST pipeline:
       1. Seed generation  (BestSeeds)
@@ -31,15 +31,15 @@ def miniBLASTn(ref, query, s1, A):
     A              : maximum diagonal window for the 2-Hit filter
     matrix         : optional substitution matrix (e.g. BLOSUM62 for proteins)
     """
-    k=BLASTN_PARAMS.k_mer_size
-    matchReward=BLASTN_PARAMS.match_reward
-    mismatchPen=BLASTN_PARAMS.mismatch_penalty
-    matrix=BLASTN_PARAMS.matrix
-    gapOpenPen=BLASTN_PARAMS.gap_opening
-    gapExtendPen=BLASTN_PARAMS.gap_extension
-    Xdrop_ungap=BLASTN_PARAMS.xdrop_ungap
-    Xdrop_gap=BLASTN_PARAMS.xdrop_gap
-    Xdrop_final=BLASTN_PARAMS.xdrop_gap_final
+    k=params.k_mer_size
+    matchReward=params.match_reward
+    mismatchPen=params.mismatch_penalty
+    matrix=params.matrix
+    gapOpenPen=params.gap_opening
+    gapExtendPen=params.gap_extension
+    Xdrop_ungap=params.xdrop_ungap
+    Xdrop_gap=params.xdrop_gap
+    Xdrop_final=params.xdrop_gap_final
 
     seedMismatchAllowed = 1
     threshHSSP = matchReward*(k-seedMismatchAllowed) - mismatchPen*(seedMismatchAllowed)
@@ -85,7 +85,7 @@ def miniBLASTn(ref, query, s1, A):
 
     return bestLocalAlignment
 
-def miniBLASTp(ref, query, s1, A, threshT):
+def miniBLASTp(ref, query, s1, A, threshT, params=BLASTP_PARAMS):
     """
     Full miniBLAST pipeline:
       1. Seed generation  (BestSeeds)
@@ -107,19 +107,19 @@ def miniBLASTp(ref, query, s1, A, threshT):
     A              : maximum diagonal window for the 2-Hit filter
     matrix         : optional substitution matrix (e.g. BLOSUM62 for proteins)
     """
-    k=BLASTP_PARAMS.k_mer_size
-    matchReward=BLASTP_PARAMS.match_reward
-    mismatchPen=BLASTP_PARAMS.mismatch_penalty
-    matrix=BLASTP_PARAMS.matrix
-    gapOpenPen=BLASTP_PARAMS.gap_opening
-    gapExtendPen=BLASTP_PARAMS.gap_extension
-    Xdrop_ungap=BLASTP_PARAMS.xdrop_ungap
-    Xdrop_gap=BLASTP_PARAMS.xdrop_gap
-    Xdrop_final=BLASTP_PARAMS.xdrop_gap_final
-    threshT=BLASTP_PARAMS.threshold_T
+    k=params.k_mer_size
+    matchReward=params.match_reward
+    mismatchPen=params.mismatch_penalty
+    matrix=params.matrix
+    gapOpenPen=params.gap_opening
+    gapExtendPen=params.gap_extension
+    Xdrop_ungap=params.xdrop_ungap
+    Xdrop_gap=params.xdrop_gap
+    Xdrop_final=params.xdrop_gap_final
 
     startTime = time.perf_counter()
-    singleSeeds = BestSeedsWithMasking(ref, query, k, matchReward, mismatchPen, matrix, threshT)
+    # BestSeedsWithMasking function uses DUST to mask low complexity DNA seq. AA sequences can get passed directly to bestSeeds without the masking check (this improves AA runtime)
+    singleSeeds = BestSeeds(ref, query, k, matchReward, mismatchPen, matrix, threshT)
     
     sum(i**2 for i in range(1000000))
     endTime = time.perf_counter()

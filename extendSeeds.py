@@ -347,9 +347,14 @@ def scorePair(a, b, matrix=None, match=None, mismatch=None):
     - protein: takes BLOSUM as substitution matrix
     - nucleotide: no matrix passed, use simple match/mismatch
     """
-
     if matrix is not None:
-        return matrix[a][b]
+        try:
+            # look up that AA in BLOSUM
+            return matrix[a][b]
+        # if that AA is not found, we have "ambiguous AA"
+        except KeyError:
+            # Standard BLAST usually penalizes unknown characters with a -1 or -4
+            return -1
     else:
         if a == b:
             return match
