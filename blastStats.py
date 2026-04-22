@@ -14,7 +14,11 @@ def calculate_e_value(S, m, n, params: BlastConfig) -> float:
     
     return e_val
 
+<<<<<<< HEAD
 def compute_s1_threshold(query, db_records, params: BlastConfig, e_threshold):
+=======
+def compute_s1_threshold(query, db_records, params: BlastConfig, e_threshold=0.001):
+>>>>>>> origin/version2
     """
     Compute an ungapped-extension threshold s1 from the BLAST
     extreme-value approximation:

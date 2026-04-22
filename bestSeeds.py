@@ -115,9 +115,20 @@ def BestSeeds(ref, query, k, matchScore, mismatchPen, matrix, threshHSSP):
              if check in d:
                 for pos in d[check]:
                     match = [i, pos, score]
-                    seeds.append(match)          
+                    seeds.append(match)   
 
-    return seeds
+    masking_info['seeds_before_masking_filter'] = len(seeds)
+    
+    # if there are seeds that overlap with low complexity regions AND the user decides to apply masking (default=true), then filter the seeds
+    if apply_masking and (query_masked_intervals or ref_masked_intervals):
+        seeds = filter_seeds_by_masking(
+            seeds, k, query_masked_intervals, ref_masked_intervals, 
+            overlap_threshold
+        )
+    
+    masking_info['seeds_after_masking_filter'] = len(seeds)
+    
+    return seeds, masking_info 
 
 ### NEED TO UPDATE THIS TO WORK BETTER FOR IUPAC
 # Input: a reference sequence string and an int k
@@ -148,7 +159,7 @@ def KmerNumericalEncoding(kmer, matrix):
     res = 0
     for pos in range(k):
         char = kmer[pos]
-        # skip if not in encodingDict (like for N, other ambigious nucleotides)
+        # skip if not in encodingDict (ambigious nucleotides, residues)
         if char not in encodingDict:
             return None
         val = encodingDict[char]

@@ -1,80 +1,62 @@
+import math
+
 def TwoHitSeeds(single_hits, k, A):
     """
-    Implement the 2-Hit Seeding Approach for sequence alignment.
-    
-    Inputs:
-    - ref, query: DNA strings
-    - k: word/kmer length
-    - matchScore, mismatchPen: scoring parameters
-    - T: Score threshold for a single word hit (should be lower than 1-hit threshold)
-    - A: Maximum window distance between two hits on the same diagonal
-    
-    Outputs:
-    - A 2D list of valid seeds [start coord in query, start coord in ref] that triggered the 2-hit rule.
+    Two-hit filtration: emit a seed only when two non-overlapping k-mer hits
+    share a diagonal and are within distance A of each other. Nearby valid hits
+    are merged into a single representative seed.
     """
-    
-    # scan for all single hits using the lower threshold T\
-    """
-    d = EncodedIndexation(ref, k)
-    single_hits = []
-    
-    for i in range(len(query) + 1 - k):
-        qKmer = query[i:i+k]
-        
-        # generate a list of kmers with an ungapped alignment at or above threshold T
-        allPossibleKmers = GenerateAllKmers(k)
-        potentialHSSPs = []
-        for kmer in allPossibleKmers:
-            score = ScoreKmers(qKmer, kmer, matchScore, mismatchPen)
-            if score >= T:
-                potentialHSSPs.append(kmer)
+    if not single_hits:
+        return []
 
-        # check against reference dictionary
-        for kmer in potentialHSSPs:
-            check = KmerNumericalEncoding(kmer)
-            if check in d:
-                for pos in d[check]:
-                    single_hits.append([i, pos]) # [query_start, ref_start]
-    """
-
-    # group hits by their diagonal (q_pos - r_pos)
     diagonals = {}
     for q_pos, r_pos, score in single_hits:
         diag = q_pos - r_pos
-        if diag not in diagonals:
-            diagonals[diag] = []
-        diagonals[diag].append([q_pos, r_pos, score])
+        diagonals.setdefault(diag, []).append((q_pos, r_pos, score))
 
-    # check proximity and trigger extension
-    valid_seeds = []
-    
+    seeds = []
+
     for diag, hits in diagonals.items():
-        # Sort sequentially by query coordinate to scan left-to-right
         hits.sort(key=lambda x: x[0])
-        
-        last_hit = None
-        for curr_hit in hits:
-            # Initialize the first hit on this diagonal
-            if last_hit is None:
-                last_hit = curr_hit
-                continue
-            
-            # Distance between their first coordinates (query positions)
-            distance = curr_hit[0] - last_hit[0]
-            
-            # Condition: Non-overlapping AND within window distance A
-            if distance >= k and distance <= A:
-                # Valid 2-hit found! 
-                # We append the current hit as the seed to trigger bidirectional extension
-                valid_seeds.append(curr_hit)
-                
-                # Update last_hit to curr_hit so we can chain subsequent hits if they occur
-                last_hit = curr_hit 
-            
-            elif distance > A:
-                # Hits are too far apart. current hit resets as the new baseline
-                last_hit = curr_hit
-                
-            # If distance < k, they overlap. just ignore curr_hit and keep last_hit.
 
-    return valid_seeds
+        # Mark which hits belong to at least one valid pair
+        in_valid_pair = [False] * len(hits)
+
+        for i in range(1, len(hits)):
+            q2 = hits[i][0]
+            for j in range(i - 1, -1, -1):
+                q1 = hits[j][0]
+                gap = q2 - q1
+
+                if gap > A:
+                    break
+                if gap >= k:
+                    in_valid_pair[i] = True
+                    in_valid_pair[j] = True
+                    break
+
+        # Merge local runs of valid hits → one seed per cluster
+        i = 0
+        while i < len(hits):
+            if not in_valid_pair[i]:
+                i += 1
+                continue
+
+            cluster = [hits[i]]
+            i += 1
+
+            while i < len(hits) and in_valid_pair[i]:
+                prev_q = cluster[-1][0]
+                curr_q = hits[i][0]
+
+                if curr_q - prev_q <= A:
+                    cluster.append(hits[i])
+                    i += 1
+                else:
+                    break
+
+            q_pos, r_pos, _ = cluster[0]
+            merged_score = sum(h[2] for h in cluster)
+            seeds.append((q_pos, r_pos, merged_score))
+
+    return seeds

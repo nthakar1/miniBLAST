@@ -9,6 +9,7 @@ from main import miniBLASTn
 from database import fetch_mixed_database
 from datatypes import BlastConfig, BLASTN_PARAMS, BLASTP_PARAMS, BLOSUM
 from statistics import calculate_bit_score, calculate_e_value
+import html
 
 st.title("miniBLAST")
 st.write("Local alignment of nucleotide or protein sequences against a database.")
@@ -128,3 +129,4 @@ if st.button("Run miniBLAST", disabled=(query is None)):
         st.download_button("Download results CSV", csv, "blast_results.csv", "text/csv")
     else:
         st.warning("No alignments passed the threshold.")
+
