@@ -73,15 +73,27 @@ def make_blast_database(db_fasta, db_prefix):
 
 
 def run_blastn(query_fasta, db_prefix, output_file):
-    print(f"\nRunning BLASTn...")
-    subprocess.run([
+    print(f"\nRunning BLASTn with Mini-BLAST parameters...")
+    
+    # Mapping datatypes.py BLASTN_PARAMS to NCBI command line flags
+    blast_args = [
         "blastn",
+        "-task", "blastn",               # Forces standard blastn instead of megablast
         "-query", query_fasta,
         "-db", db_prefix,
         "-out", output_file,
-        "-outfmt",
-        "6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore"
-    ], check=True)
+        "-word_size", "7",               # From k_mer_size=7
+        "-reward", "2",                  # From match_reward=2
+        "-penalty", "-3",                # From mismatch_penalty=3 (must be negative in CLI)
+        "-gapopen", "5",                 # From gap_opening=5
+        "-gapextend", "2",               # From gap_extension=2
+        "-xdrop_ungap", "20",            # From xdrop_ungap=20
+        "-xdrop_gap", "30",              # From xdrop_gap=30
+        "-xdrop_gap_final", "100",       # From xdrop_gap_final=100
+        "-outfmt", "6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore"
+    ]
+
+    subprocess.run(blast_args, check=True)
     print(f"BLAST results written to: {output_file}")
 
 
